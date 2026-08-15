@@ -1,0 +1,33 @@
+name: Bug
+description: Something produces the wrong decision or output
+labels: ["type: fix"]
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options: [engine, integrity, clock, agents, api, web, eval, infra]
+    validations: { required: true }
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected outcome
+      description: Which of ACCEPT / PARTIAL / DECLINE / REQUEST_EVIDENCE / ESCALATE should it have been, and why?
+    validations: { required: true }
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual outcome
+    validations: { required: true }
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction
+      description: A failing test is ideal.
+      render: python
+  - type: checkboxes
+    id: compliance
+    attributes:
+      label: Does this touch a regulatory obligation?
+      options:
+        - label: Yes — add the `compliance` label

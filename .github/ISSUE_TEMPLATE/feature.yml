@@ -1,0 +1,27 @@
+name: Feature
+description: A new capability
+labels: ["type: feature"]
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options: [engine, integrity, clock, agents, api, web, eval, infra]
+    validations: { required: true }
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: Whose problem, and what does it cost them today?
+    validations: { required: true }
+  - type: textarea
+    id: shape
+    attributes:
+      label: Proposed shape
+    validations: { required: true }
+  - type: checkboxes
+    id: adr
+    attributes:
+      label: Architecture
+      options:
+        - label: This changes the model/engine decision boundary and needs an ADR first

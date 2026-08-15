@@ -1,0 +1,70 @@
+- name: "type: feature"
+  color: "0E8A6E"
+  description: New capability
+- name: "type: fix"
+  color: "B3261E"
+  description: Bug fix
+- name: "type: refactor"
+  color: "6750A4"
+  description: Behaviour-preserving change
+- name: "type: docs"
+  color: "4A6572"
+  description: Documentation or ADR
+- name: "type: chore"
+  color: "7C7C7C"
+  description: Tooling, deps, CI
+- name: "type: test"
+  color: "1F6FEB"
+  description: Tests only
+
+- name: "area: engine"
+  color: "1F4B5F"
+  description: Decision engine
+- name: "area: integrity"
+  color: "8A4B08"
+  description: Integrity checks
+- name: "area: clock"
+  color: "7D4E00"
+  description: Code of Practice deadlines
+- name: "area: agents"
+  color: "534AB7"
+  description: LLM, RAG and VLM layers
+- name: "area: api"
+  color: "0F6E56"
+  description: FastAPI service
+- name: "area: web"
+  color: "185FA5"
+  description: Assessor console
+- name: "area: eval"
+  color: "993C1D"
+  description: AFCA evaluation harness
+- name: "area: infra"
+  color: "3D3D3A"
+  description: CI, deploy, tooling
+
+- name: "priority: p0"
+  color: "B3261E"
+  description: Blocks the demo
+- name: "priority: p1"
+  color: "D9730D"
+  description: This milestone
+- name: "priority: p2"
+  color: "8A919E"
+  description: Backlog
+
+- name: "status: blocked"
+  color: "6E7781"
+- name: "status: needs-review"
+  color: "0969DA"
+- name: "status: needs-decision"
+  color: "A32B2B"
+  description: Wants an ADR before code
+
+- name: "compliance"
+  color: "A32B2B"
+  description: Touches a regulatory obligation
+- name: "breaking"
+  color: "B3261E"
+  description: Changes a public contract
+- name: "good first issue"
+  color: "7057FF"
