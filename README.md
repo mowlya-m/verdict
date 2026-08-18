@@ -92,6 +92,35 @@ The moment a language model produces the outcome, the decision stops being repro
 
 Integrity flags never auto-decline. The engine surfaces, a human decides. An agent that alleges fraud is a defamation problem no compliance officer will sign off — see [ADR-0003](docs/adr/0003-integrity-not-fraud.md).
 
+## Two product lines
+
+Motor and home run on `engine.decide()`. Private health runs on
+`health_engine.decide_health()`. Same contract, same five outcomes, same
+reasons record. Different gates, because the questions differ.
+
+| | Motor and home | Private health |
+|---|---|---|
+| 1 | Policy in force at date of loss | Membership active on the day of service |
+| 2 | Peril falls within an insuring clause | Tier covers the clinical category |
+| 3 | No exclusion applies | Waiting period served |
+| 4 | Evidence sufficient to decide | Pre-existing condition assessed |
+| 5 | Integrity checks | Hospital agreement in place |
+| 6 | Quantum within auto-settle ceiling | Annual limit not exhausted |
+| 7 | No vulnerability signals | No vulnerability signals |
+
+Health is the better fit for a rules engine, because almost none of it is a
+matter of judgement. Since April 2019 the Commonwealth maps 38 clinical
+categories across Gold, Silver, Bronze and Basic, so "does this product cover a
+knee replacement" is a lookup rather than an opinion. Waiting periods are capped
+by statute: twelve months for a pre-existing condition, twelve for pregnancy,
+two for everything else. A fund may waive them; it cannot extend them.
+
+**The rule that shapes the whole health engine:** a pre-existing condition is
+determined by a medical practitioner appointed by the insurer, not by the fund
+and certainly not by software. So a PEC signal always produces `ESCALATE` and
+never `DECLINE`, even when the waiting period has also failed. Getting that
+backwards is not a bug, it is a breach.
+
 ## Repository layout
 
 ```
