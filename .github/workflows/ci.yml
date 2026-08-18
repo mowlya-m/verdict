@@ -62,17 +62,16 @@ jobs:
     name: Eval gate
     runs-on: ubuntu-latest
     needs: api
-    defaults:
-      run: { working-directory: apps/api }
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
-      - run: uv python install 3.12
-      - run: uv sync --all-extras
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
       - name: Run the AFCA harness
-        run: uv run python -m eval.run --fixtures ../../eval/fixtures --min-agreement 0.85 --max-false-confidence 0.02
+        env:
+          PYTHONPATH: apps/api/src:.
+        run: python -m eval.run --fixtures eval/fixtures --min-agreement 0.85 --max-false-confidence 0.02
       - name: Comment metrics on the PR
-        if: github.event_name == 'pull_request'
+        if: always() && github.event_name == 'pull_request'
         uses: marocchino/sticky-pull-request-comment@v2
         with:
-          path: apps/api/eval-report.md
+          path: eval-report.md
