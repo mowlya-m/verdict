@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import Landing from './Landing.jsx';
 
 /* ============================================================================
    VERDICT — full product surface
@@ -532,14 +533,17 @@ function Console() {
 /* --------------------------------------------------------------------- app */
 
 export default function App() {
-  const [view, setView] = useState('home');
+  const [view, setView] = useState('landing');
   const isClaimant = ['home', 'lodge', 'processing', 'outcome'].includes(view);
+
+  // The landing page owns the full viewport and its own chrome.
+  if (view === 'landing') return <Landing onEnter={() => setView('home')} />;
 
   return (
     <div className="app">
       <style>{CSS}</style>
       <header className="shell">
-        <button className="brand" onClick={() => setView('home')}>
+        <button className="brand" onClick={() => setView('landing')}>
           <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
             <circle cx="9" cy="9" r="8" fill="none" stroke={T.plum} strokeWidth="2" />
             <path d="M9 4v5l3 2" fill="none" stroke={T.plum} strokeWidth="2" strokeLinecap="round" />
