@@ -13,6 +13,7 @@ dist/
 .env.*
 !.env.example
 .DS_Store
-eval/fixtures/*.json
-!eval/fixtures/.gitkeep
+eval/cache/
+eval/*.pdf
+# determination text never enters version control; see eval/README.md
 eval-report.md
