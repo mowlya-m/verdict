@@ -143,6 +143,27 @@ verdict/
 └── .github/                  CI, labels, templates
 ```
 
+## The service
+
+```bash
+make api          # uvicorn on :8000, docs at /docs
+```
+
+| Route | Purpose |
+|---|---|
+| `POST /claims/motor/decide` | Decide a motor or home claim |
+| `POST /claims/health/decide` | Decide a private health claim |
+| `GET /health` | Liveness |
+
+`?as_at=YYYY-MM-DD` fixes the Code clock at a point in time. The eval harness
+uses it; production should not.
+
+The routes are deliberately thin. Validate, map, call a pure function, map
+back. No decision logic lives in `apps/api/src/verdict/api/`, and a rule change
+belongs in `engine.py` or `health_engine.py` where it is unit tested.
+
+Responses carry no confidence score. The gate trace is the audit trail.
+
 ## Quickstart
 
 ```bash
