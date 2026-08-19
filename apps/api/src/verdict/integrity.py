@@ -11,7 +11,7 @@ buildable today rather than aspirational.
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date
 
 from .schemas import Claim, IntegrityFlag
 
@@ -24,7 +24,10 @@ def check_incident_before_inception(claim: Claim) -> IntegrityFlag | None:
     if claim.date_of_loss < claim.policy.inception:
         return IntegrityFlag(
             code="LOSS_BEFORE_INCEPTION",
-            detail=f"Loss dated {claim.date_of_loss} precedes policy inception {claim.policy.inception}.",
+            detail=(
+                f"Loss dated {claim.date_of_loss} precedes policy inception "
+                f"{claim.policy.inception}."
+            ),
             weight=3,
         )
     return None
@@ -74,7 +77,10 @@ def check_exif_dates(claim: Claim, exif_dates: dict[str, date]) -> list[Integrit
             flags.append(
                 IntegrityFlag(
                     code="PHOTO_LONG_AFTER_LOSS",
-                    detail=f"{image} captured {(captured - claim.date_of_loss).days} days after the loss.",
+                    detail=(
+                        f"{image} captured "
+                        f"{(captured - claim.date_of_loss).days} days after the loss."
+                    ),
                     weight=1,
                 )
             )
@@ -82,8 +88,11 @@ def check_exif_dates(claim: Claim, exif_dates: dict[str, date]) -> list[Integrit
 
 
 def check_duplicate_images(image_hashes: dict[str, str]) -> list[IntegrityFlag]:
-    """Perceptual hash collisions. Same image submitted twice under
-    different names, or reused across claims."""
+    """Detect perceptual hash collisions.
+
+    The same image submitted twice under different names, or reused across
+    claims.
+    """
     seen: dict[str, str] = {}
     flags = []
     for name, h in image_hashes.items():
@@ -110,7 +119,9 @@ def check_quote_against_damage(claim: Claim) -> IntegrityFlag | None:
     if over > QUOTE_VARIANCE_TOLERANCE:
         return IntegrityFlag(
             code="QUOTE_ABOVE_BAND",
-            detail=f"Quote {claim.quote_total:,.0f} is {over:.0%} above the top of the estimated band.",
+            detail=(
+                f"Quote {claim.quote_total:,.0f} is {over:.0%} above the top of the estimated band."
+            ),
             weight=2,
         )
     return None

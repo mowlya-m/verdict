@@ -8,11 +8,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import date
-from enum import Enum
-from typing import Optional
+from enum import StrEnum
+
+from .clock import ClockStatus
 
 
-class Outcome(str, Enum):
+class Outcome(StrEnum):
     ACCEPT = "accept"
     PARTIAL = "partial"
     DECLINE = "decline"
@@ -20,7 +21,7 @@ class Outcome(str, Enum):
     ESCALATE = "escalate"
 
 
-class Severity(str, Enum):
+class Severity(StrEnum):
     LIGHT = "light"
     MODERATE = "moderate"
     HEAVY = "heavy"
@@ -29,8 +30,11 @@ class Severity(str, Enum):
 
 @dataclass
 class PolicyClause:
-    """A retrieved clause. `clause_id` must survive retrieval intact or the
-    reasons record is worthless in a dispute."""
+    """A retrieved clause.
+
+    `clause_id` must survive retrieval intact, or the reasons record is
+    worthless in a dispute.
+    """
 
     clause_id: str
     heading: str
@@ -47,7 +51,7 @@ class Policy:
     effective_to: date
     inception: date
     excess: float
-    insured_value: Optional[float] = None
+    insured_value: float | None = None
 
 
 @dataclass
@@ -69,7 +73,7 @@ class IntegrityFlag:
 class EvidenceItem:
     kind: str
     present: bool
-    reference: Optional[str] = None
+    reference: str | None = None
 
 
 @dataclass
@@ -87,15 +91,15 @@ class Claim:
     integrity: list[IntegrityFlag] = field(default_factory=list)
     evidence: list[EvidenceItem] = field(default_factory=list)
 
-    quote_total: Optional[float] = None
-    estimate_low: Optional[float] = None
-    estimate_high: Optional[float] = None
+    quote_total: float | None = None
+    estimate_low: float | None = None
+    estimate_high: float | None = None
 
     vulnerability_signals: list[str] = field(default_factory=list)
 
     # clock
-    all_info_received_on: Optional[date] = None
-    decided_on: Optional[date] = None
+    all_info_received_on: date | None = None
+    decided_on: date | None = None
 
 
 @dataclass
@@ -104,7 +108,7 @@ class Gate:
     name: str
     passed: bool
     basis: str
-    citation: Optional[str] = None
+    citation: str | None = None
     blocking: bool = True
 
 
@@ -115,17 +119,20 @@ class ReasonsRecord:
     claim_id: str
     outcome: Outcome
     gates: list[Gate]
-    payable: Optional[float]
-    excess_applied: Optional[float]
+    payable: float | None
+    excess_applied: float | None
     missing_evidence: list[str]
     escalation_reasons: list[str]
     clauses_relied_on: list[str]
-    clock: dict
+    clock: ClockStatus
 
     def summary(self) -> str:
         failed = [g for g in self.gates if not g.passed]
         if self.outcome is Outcome.ACCEPT:
-            return f"All {len(self.gates)} gates cleared. Payable {self.payable:,.2f} after {self.excess_applied:,.2f} excess."
+            return (
+                f"All {len(self.gates)} gates cleared. "
+                f"Payable {self.payable:,.2f} after {self.excess_applied:,.2f} excess."
+            )
         if self.outcome is Outcome.REQUEST_EVIDENCE:
             return "Cannot decide yet. Missing: " + ", ".join(self.missing_evidence)
         if self.outcome is Outcome.ESCALATE:

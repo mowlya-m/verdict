@@ -32,7 +32,11 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "UP", "B", "SIM", "RUF", "ANN", "D"]
-ignore = ["D203", "D213", "ANN101", "ANN102"]
+# D101/D102/D103 demand a docstring on every class, method and function. In a
+# codebase this small, with names this explicit, that produces restatement
+# rather than explanation. Module-level docstrings (D100, D104) stay required,
+# and they are where the reasoning actually belongs.
+ignore = ["D203", "D213", "D101", "D102", "D103", "D107"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["D", "ANN", "S101"]

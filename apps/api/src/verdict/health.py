@@ -28,10 +28,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import date
-from enum import Enum
+from enum import StrEnum
 
 
-class Tier(str, Enum):
+class Tier(StrEnum):
     BASIC = "basic"
     BRONZE = "bronze"
     SILVER = "silver"
@@ -43,27 +43,48 @@ class Tier(str, Enum):
 #: Working subset. Replace with the full mandated list before production.
 TIER_CATEGORIES: dict[Tier, set[str]] = {
     Tier.BASIC: {
-        "rehabilitation",            # restricted at Basic
-        "hospital_psychiatric",      # restricted at Basic
-        "palliative_care",           # restricted at Basic
+        "rehabilitation",  # restricted at Basic
+        "hospital_psychiatric",  # restricted at Basic
+        "palliative_care",  # restricted at Basic
     },
     Tier.BRONZE: {
-        "brain_and_nervous_system", "kidney_and_bladder", "digestive_system",
-        "hernia_and_appendix", "gastrointestinal_endoscopy", "gynaecology",
-        "chemotherapy_radiotherapy_immunotherapy", "pain_management",
-        "skin", "breast_surgery", "diabetes_management", "tonsils_adenoids_grommets",
-        "bone_joint_and_muscle", "ear_nose_and_throat", "eye_not_cataracts",
-        "male_reproductive_system", "miscarriage_and_termination",
+        "brain_and_nervous_system",
+        "kidney_and_bladder",
+        "digestive_system",
+        "hernia_and_appendix",
+        "gastrointestinal_endoscopy",
+        "gynaecology",
+        "chemotherapy_radiotherapy_immunotherapy",
+        "pain_management",
+        "skin",
+        "breast_surgery",
+        "diabetes_management",
+        "tonsils_adenoids_grommets",
+        "bone_joint_and_muscle",
+        "ear_nose_and_throat",
+        "eye_not_cataracts",
+        "male_reproductive_system",
+        "miscarriage_and_termination",
     },
     Tier.SILVER: {
-        "heart_and_vascular", "lung_and_chest", "blood", "back_neck_and_spine",
-        "plastic_and_reconstructive_surgery", "dental_surgery",
-        "podiatric_surgery", "implantation_of_hearing_devices",
+        "heart_and_vascular",
+        "lung_and_chest",
+        "blood",
+        "back_neck_and_spine",
+        "plastic_and_reconstructive_surgery",
+        "dental_surgery",
+        "podiatric_surgery",
+        "implantation_of_hearing_devices",
     },
     Tier.GOLD: {
-        "cataracts", "joint_replacements", "dialysis_for_chronic_kidney_failure",
-        "pregnancy_and_birth", "assisted_reproductive_services",
-        "weight_loss_surgery", "insulin_pumps", "pain_management_with_device",
+        "cataracts",
+        "joint_replacements",
+        "dialysis_for_chronic_kidney_failure",
+        "pregnancy_and_birth",
+        "assisted_reproductive_services",
+        "weight_loss_surgery",
+        "insulin_pumps",
+        "pain_management_with_device",
         "sleep_studies",
     },
 }
@@ -76,7 +97,7 @@ RESTRICTED_AT_BASIC = {"rehabilitation", "hospital_psychiatric", "palliative_car
 #: Legislated maximum waiting periods, in days.
 WAIT_PRE_EXISTING = 365
 WAIT_PREGNANCY = 365
-WAIT_GENERAL = 61          # "two months"
+WAIT_GENERAL = 61  # "two months"
 WAIT_PSYCH_EXEMPTION = 61  # one-off psych waiver still serves the general wait
 
 PREGNANCY_CATEGORIES = {"pregnancy_and_birth", "assisted_reproductive_services"}
@@ -103,11 +124,11 @@ class Membership:
     member_number: str
     fund: str
     tier: Tier
-    joined: date                 # start of continuous cover
-    product_started: date        # start of THIS product, for upgrade waits
+    joined: date  # start of continuous cover
+    product_started: date  # start of THIS product, for upgrade waits
     hospital_excess: float = 0.0
-    extras_limits: dict[str, float] = field(default_factory=dict)   # annual entitlement
-    extras_used: dict[str, float] = field(default_factory=dict)     # claimed to date
+    extras_limits: dict[str, float] = field(default_factory=dict)  # annual entitlement
+    extras_used: dict[str, float] = field(default_factory=dict)  # claimed to date
     suspended_from: date | None = None
     suspended_to: date | None = None
 
@@ -129,8 +150,8 @@ class Membership:
 class HealthService:
     """One admission or extras service being claimed."""
 
-    service_type: str            # "hospital" | "extras"
-    clinical_category: str       # e.g. "joint_replacements"
+    service_type: str  # "hospital" | "extras"
+    clinical_category: str  # e.g. "joint_replacements"
     mbs_items: list[str] = field(default_factory=list)
     provider_id: str = ""
     provider_has_agreement: bool = True
@@ -140,7 +161,7 @@ class HealthService:
 
     # clinical history, extracted from the referral or admission notes
     symptoms_first_noted: date | None = None
-    practitioner_assessed_pec: bool | None = None   # None = not yet assessed
+    practitioner_assessed_pec: bool | None = None  # None = not yet assessed
 
     @property
     def gap(self) -> float:
