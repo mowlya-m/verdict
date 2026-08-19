@@ -29,7 +29,7 @@ from .health import (
 )
 from .schemas import Gate, Outcome, ReasonsRecord
 
-AUTO_SETTLE_CEILING = 15000.0   # hospital benefits run higher than motor repairs
+AUTO_SETTLE_CEILING = 15000.0  # hospital benefits run higher than motor repairs
 
 
 def _pretty(category: str) -> str:
@@ -45,15 +45,20 @@ def _membership_active(m: Membership, day: date) -> Gate:
     else:
         basis = f"Continuous cover since {m.joined}."
     return Gate(
-        n=1, name="Membership active on the day of service", passed=ok,
-        basis=basis, citation=f"{m.fund} · {m.member_number}",
+        n=1,
+        name="Membership active on the day of service",
+        passed=ok,
+        basis=basis,
+        citation=f"{m.fund} · {m.member_number}",
     )
 
 
 def _tier_covers(m: Membership, s: HealthService) -> Gate:
     if s.service_type == "extras":
         return Gate(
-            n=2, name="Service within the product", passed=True,
+            n=2,
+            name="Service within the product",
+            passed=True,
             basis="Extras service, assessed against annual limits rather than clinical category.",
         )
     covered = categories_for(m.tier)
@@ -73,8 +78,11 @@ def _tier_covers(m: Membership, s: HealthService) -> Gate:
     else:
         basis = f"{m.tier.value.title()} includes {_pretty(s.clinical_category)}."
     return Gate(
-        n=2, name="Tier covers the clinical category", passed=ok,
-        basis=basis, citation=f"Clinical category · {s.clinical_category}",
+        n=2,
+        name="Tier covers the clinical category",
+        passed=ok,
+        basis=basis,
+        citation=f"Clinical category · {s.clinical_category}",
     )
 
 
@@ -95,11 +103,19 @@ def _waiting_period(m: Membership, s: HealthService, day: date) -> tuple[Gate, b
     basis = (
         f"{served} days of cover against a {required} day {label} waiting period."
         if ok
-        else f"{served} days of cover, {label} waiting period is {required} days. Clears {clears_on}."
+        else (
+            f"{served} days of cover, {label} waiting period is "
+            f"{required} days. Clears {clears_on}."
+        )
     )
     return (
-        Gate(n=3, name="Waiting period served", passed=ok, basis=basis,
-             citation="Private Health Insurance Act, waiting periods"),
+        Gate(
+            n=3,
+            name="Waiting period served",
+            passed=ok,
+            basis=basis,
+            citation="Private Health Insurance Act, waiting periods",
+        ),
         pec,
     )
 
@@ -107,31 +123,45 @@ def _waiting_period(m: Membership, s: HealthService, day: date) -> tuple[Gate, b
 def _pec_assessment(s: HealthService, pec: bool | None) -> Gate:
     if s.service_type == "extras":
         return Gate(
-            n=4, name="Pre-existing condition assessed", passed=True,
+            n=4,
+            name="Pre-existing condition assessed",
+            passed=True,
             basis="Not applicable. The pre-existing condition rule governs hospital cover.",
         )
     if s.practitioner_assessed_pec is not None:
         return Gate(
-            n=4, name="Pre-existing condition assessed", passed=True,
-            basis=("An appointed medical practitioner assessed this as pre-existing."
-                   if s.practitioner_assessed_pec
-                   else "An appointed medical practitioner assessed this as not pre-existing."),
+            n=4,
+            name="Pre-existing condition assessed",
+            passed=True,
+            basis=(
+                "An appointed medical practitioner assessed this as pre-existing."
+                if s.practitioner_assessed_pec
+                else "An appointed medical practitioner assessed this as not pre-existing."
+            ),
             citation="PEC assessment on file",
         )
     if pec is None:
         return Gate(
-            n=4, name="Pre-existing condition assessed", passed=False,
+            n=4,
+            name="Pre-existing condition assessed",
+            passed=False,
             basis="No symptom history on file, so the six month lookback cannot be applied.",
         )
     if pec:
         return Gate(
-            n=4, name="Pre-existing condition assessed", passed=False,
-            basis=("Symptoms fall inside the six month lookback before joining. "
-                   "Only a medical practitioner appointed by the insurer can determine this."),
+            n=4,
+            name="Pre-existing condition assessed",
+            passed=False,
+            basis=(
+                "Symptoms fall inside the six month lookback before joining. "
+                "Only a medical practitioner appointed by the insurer can determine this."
+            ),
             citation="Private Health Insurance Act, pre-existing condition rule",
         )
     return Gate(
-        n=4, name="Pre-existing condition assessed", passed=True,
+        n=4,
+        name="Pre-existing condition assessed",
+        passed=True,
         basis="Symptoms fall outside the six month lookback.",
     )
 
@@ -139,14 +169,22 @@ def _pec_assessment(s: HealthService, pec: bool | None) -> Gate:
 def _provider(s: HealthService) -> Gate:
     if s.service_type == "extras":
         ok = bool(s.provider_id)
-        return Gate(n=5, name="Provider recognised", passed=ok,
-                    basis="Recognised provider." if ok else "No provider number supplied.")
+        return Gate(
+            n=5,
+            name="Provider recognised",
+            passed=ok,
+            basis="Recognised provider." if ok else "No provider number supplied.",
+        )
     return Gate(
-        n=5, name="Hospital agreement in place", passed=s.provider_has_agreement,
-        basis=("Agreement hospital, benefits paid at the contracted rate."
-               if s.provider_has_agreement
-               else "No agreement with this hospital. Benefits fall to the minimum rate and "
-                    "the member carries a materially larger gap than they expect."),
+        n=5,
+        name="Hospital agreement in place",
+        passed=s.provider_has_agreement,
+        basis=(
+            "Agreement hospital, benefits paid at the contracted rate."
+            if s.provider_has_agreement
+            else "No agreement with this hospital. Benefits fall to the minimum rate and "
+            "the member carries a materially larger gap than they expect."
+        ),
         blocking=False,
     )
 
@@ -155,24 +193,32 @@ def _limit(m: Membership, s: HealthService) -> Gate:
     if s.service_type != "extras":
         amount = s.fund_benefit_scheduled
         return Gate(
-            n=6, name="Benefit within auto-settle ceiling", passed=amount <= AUTO_SETTLE_CEILING,
+            n=6,
+            name="Benefit within auto-settle ceiling",
+            passed=amount <= AUTO_SETTLE_CEILING,
             basis=f"{amount:,.2f} against a {AUTO_SETTLE_CEILING:,.0f} ceiling.",
             blocking=False,
         )
     remaining = m.extras_remaining(s.clinical_category)
     ok = s.fund_benefit_scheduled <= remaining
     return Gate(
-        n=6, name="Annual limit not exhausted", passed=ok,
-        basis=(f"{remaining:,.2f} remaining on {_pretty(s.clinical_category)}."
-               if ok
-               else f"Claim of {s.fund_benefit_scheduled:,.2f} exceeds {remaining:,.2f} remaining."),
+        n=6,
+        name="Annual limit not exhausted",
+        passed=ok,
+        basis=(
+            f"{remaining:,.2f} remaining on {_pretty(s.clinical_category)}."
+            if ok
+            else f"Claim of {s.fund_benefit_scheduled:,.2f} exceeds {remaining:,.2f} remaining."
+        ),
         citation=f"Extras limit · {s.clinical_category}",
     )
 
 
 def _vulnerability(signals: list[str]) -> Gate:
     return Gate(
-        n=7, name="No vulnerability signals", passed=not signals,
+        n=7,
+        name="No vulnerability signals",
+        passed=not signals,
         basis="None detected." if not signals else "Detected: " + ", ".join(signals),
         blocking=False,
     )
@@ -203,9 +249,7 @@ def decide_health(
     escalation: list[str] = []
     missing: list[str] = []
 
-    if not g1.passed:
-        outcome = Outcome.DECLINE
-    elif not g2.passed:
+    if not g1.passed or not g2.passed:
         outcome = Outcome.DECLINE
     elif pec is None and not g4.passed:
         outcome = Outcome.REQUEST_EVIDENCE

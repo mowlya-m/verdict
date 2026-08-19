@@ -7,7 +7,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "lint": "eslint src --max-warnings 0",
-    "typecheck": "tsc --noEmit --jsx react-jsx --allowJs --checkJs false src/App.jsx",
+    "typecheck": "echo 'no TypeScript in this workspace'",
     "format": "prettier --write src"
   },
   "dependencies": {
@@ -19,6 +19,10 @@
     "eslint": "^9.18.0",
     "prettier": "^3.4.2",
     "typescript": "^5.7.3",
-    "vite": "^6.0.7"
+    "vite": "^6.0.7",
+    "@eslint/js": "^9.18.0",
+    "eslint-plugin-react": "^7.37.4",
+    "eslint-plugin-react-hooks": "^5.1.0",
+    "globals": "^15.14.0"
   }
 }

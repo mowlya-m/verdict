@@ -34,7 +34,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
-        with: { enable-cache: true }
+        with:
+          enable-cache: true
+          cache-dependency-glob: "apps/api/pyproject.toml" 
       - run: uv python install 3.12
       - run: uv sync --all-extras
       - name: Lint

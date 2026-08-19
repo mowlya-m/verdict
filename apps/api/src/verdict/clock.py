@@ -15,11 +15,15 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
-DECISION_DAYS = 120          # 4 months from notification
+#: Position of one file against every applicable Code deadline. Values are
+#: mixed by nature: ISO dates, day counts, ratios and booleans.
+ClockStatus = dict[str, str | int | float | bool]
+
+DECISION_DAYS = 120  # 4 months from notification
 DECISION_DAYS_EXTENDED = 365  # 12 months in defined circumstances
-DECISION_DAYS_ALL_INFO = 10   # business days once enquiries complete
-IDR_RESPONSE_DAYS = 30        # calendar days, RG 271
-UPDATE_INTERVAL_DAYS = 20     # progress update cadence
+DECISION_DAYS_ALL_INFO = 10  # business days once enquiries complete
+IDR_RESPONSE_DAYS = 30  # calendar days, RG 271
+UPDATE_INTERVAL_DAYS = 20  # progress update cadence
 
 AMBER_THRESHOLD = 0.75  # fraction of the window consumed before we warn
 
@@ -49,15 +53,14 @@ def clock_status(
     today: date,
     all_info_received_on: date | None = None,
     extended: bool = False,
-) -> dict:
+) -> ClockStatus:
     """Return the live position against every applicable deadline."""
-
     window = DECISION_DAYS_EXTENDED if extended else DECISION_DAYS
     decision_due = date_notified + timedelta(days=window)
     elapsed = (today - date_notified).days
     consumed = elapsed / window if window else 1.0
 
-    status = {
+    status: ClockStatus = {
         "date_notified": date_notified.isoformat(),
         "decision_due": decision_due.isoformat(),
         "days_remaining": (decision_due - today).days,
@@ -70,7 +73,9 @@ def clock_status(
     if all_info_received_on:
         short_due = add_business_days(all_info_received_on, DECISION_DAYS_ALL_INFO)
         status["short_form_due"] = short_due.isoformat()
-        status["short_form_days_remaining"] = business_days_between(today, short_due) if today < short_due else 0
+        status["short_form_days_remaining"] = (
+            business_days_between(today, short_due) if today < short_due else 0
+        )
         status["short_form_breached"] = today > short_due
         if status["short_form_breached"]:
             status["breached"] = True

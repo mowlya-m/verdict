@@ -66,9 +66,7 @@ def _exclusions(claim: Claim) -> Gate:
         name="No exclusion applies",
         passed=not hits,
         basis=(
-            f"Excluded by {hits[0].heading}."
-            if hits
-            else "No exclusion matched the circumstances."
+            f"Excluded by {hits[0].heading}." if hits else "No exclusion matched the circumstances."
         ),
         citation=hits[0].clause_id if hits else None,
     )
@@ -111,7 +109,9 @@ def _integrity(claim: Claim) -> Gate:
 
 def _quantum(claim: Claim) -> Gate:
     amount = claim.quote_total or claim.estimate_high or 0.0
-    determinable = any(d.severity is not Severity.UNDETERMINABLE for d in claim.damage) or bool(claim.quote_total)
+    determinable = any(d.severity is not Severity.UNDETERMINABLE for d in claim.damage) or bool(
+        claim.quote_total
+    )
     return Gate(
         n=6,
         name="Quantum within auto-settle ceiling",
@@ -157,15 +157,13 @@ def decide(claim: Claim, today: date | None = None) -> ReasonsRecord:
     escalation: list[str] = []
 
     # Hard declines first. These are coverage facts, not judgement calls.
-    if not g1.passed:
-        outcome = Outcome.DECLINE
-    elif not g2.passed:
-        outcome = Outcome.DECLINE
-    elif not g3.passed:
+    if not g1.passed or not g2.passed or not g3.passed:
         outcome = Outcome.DECLINE
     elif integrity_score(claim.integrity) >= INTEGRITY_DECLINE_AT:
         outcome = Outcome.ESCALATE
-        escalation.append("Integrity score at investigation threshold. A human must decide, not the engine.")
+        escalation.append(
+            "Integrity score at investigation threshold. A human must decide, not the engine."
+        )
     elif not g4.passed:
         outcome = Outcome.REQUEST_EVIDENCE
     elif not g5.passed:
