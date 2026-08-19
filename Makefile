@@ -24,6 +24,9 @@ fmt: ## Format
 	cd $(API) && $(PYTHON) -m ruff format . && $(PYTHON) -m ruff check --fix .
 	cd $(WEB) && npm run format
 
+api: ## api only, on :8000
+	cd $(API) && PYTHONPATH=src $(PYTHON) -m uvicorn verdict.api.main:app --reload --port 8000
+
 dev: ## api on :8000, web on :5173
 	cd $(API) && $(PYTHON) -m uvicorn verdict.api.main:app --reload --port 8000 & \
 	cd $(WEB) && npm run dev
