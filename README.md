@@ -5,7 +5,8 @@
 **An autonomous claims agent for Australian general insurance.**
 Processes routine claims from first notification to settlement. Escalates the rest with a reasons record a human can act on in ninety seconds.
 
-[![CI](https://github.com/mowlya-m/verdict/actions/workflows/ci.yml/badge.svg)](https://github.com/mowlya-m/verdict/actions/workflows/ci.yml)
+[![API](https://img.shields.io/github/actions/workflow/status/mowlya-m/verdict/ci.yml?branch=main&label=api%20%C2%B7%20web&labelColor=0C222B&color=34D399)](https://github.com/mowlya-m/verdict/actions/workflows/ci.yml)
+[![Eval](https://img.shields.io/badge/eval-62.5%25%20vs%2085%25%20gate-FB7185?labelColor=0C222B)](eval/README.md)
 [![Python 3.12](https://img.shields.io/badge/python-3.12-1F4B5F.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-34506B.svg)](LICENSE)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
@@ -15,6 +16,12 @@ Processes routine claims from first notification to settlement. Escalates the re
 </div>
 
 ---
+
+> **The eval badge is red on purpose.** The engine currently agrees with AFCA
+> 62.5% of the time against an 85% gate, measured on eight hand-built adversarial
+> fixtures. False confidence is 0.0%. Lowering a threshold to turn a build green
+> is how you end up with a number that means nothing, so it stays red until real
+> determinations replace the fixtures. See [eval/README.md](eval/README.md).
 
 ## The problem
 
@@ -28,30 +35,32 @@ VERDICT is built for that. Not "assess claims faster" — **own the file, and ne
 
 ## The pipeline
 
+<p align="center">
+  <img src="docs/pipeline.svg" alt="A claim enters intake, fans out to a policy agent, a vision agent and an integrity agent that each return evidence, then a deterministic decision engine produces one of five outcomes: settle, request evidence, or escalate. A Code of Practice clock runs across the whole file from notification." width="100%">
+</p>
+
+<details>
+<summary>Same diagram as text, for editing and for screen readers</summary>
+
 ```mermaid
-flowchart TD
-    subgraph clock["⏱ Code clock — runs on every file from notification"]
-        direction TB
-        FNOL["Claim intake<br/><sub>docs · photos · emails</sub>"]
+flowchart LR
+    FNOL["Claim intake<br/>documents · photos · email"]
 
-        FNOL --> POL["Policy agent<br/><sub>PDS at date of loss</sub>"]
-        FNOL --> VIS["Vision agent<br/><sub>parts · severity band</sub>"]
-        FNOL --> INT["Integrity agent<br/><sub>within-claim discrepancies</sub>"]
+    FNOL --> POL["Policy agent<br/>wording at the date of loss"]
+    FNOL --> VIS["Vision agent<br/>damaged parts · severity band"]
+    FNOL --> INT["Integrity agent<br/>within-claim discrepancies"]
 
-        POL --> ENG
-        VIS --> ENG
-        INT --> ENG
+    POL --> ENG
+    VIS --> ENG
+    INT --> ENG
 
-        ENG["<b>Decision engine</b><br/><sub>deterministic · no model</sub>"]
+    ENG["Decision engine<br/>deterministic · no model call"]
 
-        ENG -->|insufficient| REQ["Request evidence<br/><sub>loops to intake</sub>"]
-        ENG -->|clean| SET["Settle<br/><sub>repairer or cash</sub>"]
-        ENG -->|ambiguous| ESC["Escalate<br/><sub>with reasons record</sub>"]
+    ENG -->|clean| SET["Settle<br/>repairer or cash"]
+    ENG -->|insufficient| REQ["Request evidence<br/>re-runs on arrival"]
+    ENG -->|ambiguous| ESC["Escalate<br/>with a reasons record"]
 
-        REQ -.re-runs on arrival.-> FNOL
-    end
-
-    ENG --> REC[("Reasons record<br/><sub>clause IDs · evidence · outcome</sub>")]
+    REQ -.-> FNOL
 
     classDef agent fill:#EEEDFE,stroke:#534AB7,color:#26215C
     classDef engine fill:#E1F5EE,stroke:#0F6E56,color:#04342C
@@ -59,9 +68,11 @@ flowchart TD
     classDef term fill:#FAECE7,stroke:#993C1D,color:#4A1B0C
     class POL,VIS,INT agent
     class ENG engine
-    class FNOL,REQ,SET,REC out
+    class FNOL,REQ,SET out
     class ESC term
 ```
+
+</details>
 
 ### The one rule that makes it defensible
 
@@ -142,6 +153,27 @@ verdict/
 │   └── adr/                  Architecture decision records
 └── .github/                  CI, labels, templates
 ```
+
+## The service
+
+```bash
+make api          # uvicorn on :8000, docs at /docs
+```
+
+| Route | Purpose |
+|---|---|
+| `POST /claims/motor/decide` | Decide a motor or home claim |
+| `POST /claims/health/decide` | Decide a private health claim |
+| `GET /health` | Liveness |
+
+`?as_at=YYYY-MM-DD` fixes the Code clock at a point in time. The eval harness
+uses it; production should not.
+
+The routes are deliberately thin. Validate, map, call a pure function, map
+back. No decision logic lives in `apps/api/src/verdict/api/`, and a rule change
+belongs in `engine.py` or `health_engine.py` where it is unit tested.
+
+Responses carry no confidence score. The gate trace is the audit trail.
 
 ## Quickstart
 
