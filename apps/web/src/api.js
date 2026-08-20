@@ -1,9 +1,9 @@
 /**
  * Client for the decision service.
  *
- * The engine is the source of truth for every outcome. The console renders
- * what it is told and computes nothing, which is why there is no decision
- * logic anywhere in this file.
+ * The engine is the source of truth for every outcome. This file transports
+ * and surfaces errors; it computes nothing. There is deliberately no decision
+ * logic anywhere in it.
  */
 
 const BASE = import.meta.env?.VITE_API_URL ?? '/api';
