@@ -17,3 +17,4 @@ eval/cache/
 eval/*.pdf
 # determination text never enters version control; see eval/README.md
 eval-report.md
+.vercel
