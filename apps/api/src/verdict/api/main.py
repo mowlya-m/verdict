@@ -13,11 +13,13 @@ Docs at /docs, schema at /openapi.json.
 from __future__ import annotations
 
 import logging
+import os
 from datetime import date
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
+from verdict.agents.intake import IntakeError, extract
 from verdict.engine import decide
 from verdict.health_engine import decide_health
 
@@ -28,7 +30,15 @@ from .mapping import (
     to_membership,
     to_service,
 )
-from .models import DecisionOut, ErrorOut, HealthClaimIn, MotorClaimIn
+from .models import (
+    DamageOut,
+    DecisionOut,
+    ErrorOut,
+    HealthClaimIn,
+    IntakeIn,
+    IntakeOut,
+    MotorClaimIn,
+)
 
 log = logging.getLogger("verdict")
 
@@ -45,13 +55,23 @@ app = FastAPI(
     ),
 )
 
-# The console runs on a different origin in development. Tighten this to the
-# deployed origin before anything real is behind it.
+# Origins come from the environment so the deployed console can be allowed
+# without a code change, and so a wildcard cannot reach production by accident.
+# A wildcard here would let any site on the internet drive the decision engine
+# from a visitor's browser.
+DEV_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"]
+_configured = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "").split(",") if o.strip()]
+ALLOWED_ORIGINS = _configured or DEV_ORIGINS
+
+if "*" in ALLOWED_ORIGINS:
+    raise RuntimeError("ALLOWED_ORIGINS must name origins explicitly. Wildcards are refused.")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_methods=["GET", "POST"],
-    allow_headers=["*"],
+    allow_headers=["Content-Type"],
+    max_age=600,
 )
 
 
@@ -59,6 +79,12 @@ app.add_middleware(
 def healthcheck() -> dict[str, str]:
     """Liveness probe. Named for the convention, unrelated to health insurance."""
     return {"status": "ok", "engine": ENGINE_VERSION}
+
+
+@app.get("/", include_in_schema=False)
+def root() -> dict[str, str]:
+    """Point a curious visitor at the docs rather than returning a bare 404."""
+    return {"service": "verdict", "version": ENGINE_VERSION, "docs": "/docs"}
 
 
 @app.post(
@@ -108,3 +134,51 @@ def decide_health_claim(body: HealthClaimIn, as_at: date | None = None) -> Decis
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     log.info("health %s -> %s", body.claim_id, record.outcome.value)
     return to_decision(record)
+
+
+@app.post(
+    "/intake/extract",
+    response_model=IntakeOut,
+    responses={422: {"model": ErrorOut}, 502: {"model": ErrorOut}},
+    tags=["agents"],
+)
+def intake(body: IntakeIn) -> IntakeOut:
+    """Read a claimant's own words and return structured facts.
+
+    This endpoint cannot decide anything. `IntakeOut` has no field capable of
+    expressing an outcome, and the agent raises if the model returns one anyway.
+    Feed the result to `/claims/motor/decide` once the gaps in `missing` are
+    filled.
+    """
+    try:
+        e = extract(body.narrative, reference_date=body.reference_date)
+    except IntakeError as exc:
+        # 502 rather than 500: the failure is upstream, and the message is
+        # written to be shown to a person rather than buried in a log.
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    log.info("intake peril=%s missing=%d", e.peril, len(e.missing))
+    return IntakeOut(
+        peril=e.peril,
+        date_of_loss=e.date_of_loss,
+        time_of_day=e.time_of_day,
+        location=e.location,
+        summary=e.summary,
+        parties=e.parties,
+        damage=[
+            DamageOut(
+                part=d["part"],
+                severity=d["severity"],  # type: ignore[arg-type]
+                quote=d.get("quote", ""),
+            )
+            for d in e.damage
+        ],
+        injuries_reported=e.injuries_reported,
+        police_involved=e.police_involved,
+        third_party_details_exchanged=e.third_party_details_exchanged,
+        vulnerability_signals=e.vulnerability_signals,
+        missing=e.missing,
+        quotes=e.quotes,
+        unresolved=e.unresolved,
+        ready_to_decide=e.ready_to_decide,
+    )

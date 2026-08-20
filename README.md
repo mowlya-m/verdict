@@ -11,7 +11,7 @@ Processes routine claims from first notification to settlement. Escalates the re
 [![License: MIT](https://img.shields.io/badge/license-MIT-34506B.svg)](LICENSE)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
-[Live demo](https://verdict-claims.vercel.app) · [Architecture](docs/architecture.md) · [Decision records](docs/adr) · [Contributing](CONTRIBUTING.md)
+[Live demo](https://verdict-ochre.vercel.app) · [Architecture](docs/architecture.md) · [Decision records](docs/adr) · [Contributing](CONTRIBUTING.md)
 
 </div>
 
@@ -164,6 +164,7 @@ make api          # uvicorn on :8000, docs at /docs
 |---|---|
 | `POST /claims/motor/decide` | Decide a motor or home claim |
 | `POST /claims/health/decide` | Decide a private health claim |
+| `POST /intake/extract` | Read a claimant's own words into structured facts |
 | `GET /health` | Liveness |
 
 `?as_at=YYYY-MM-DD` fixes the Code clock at a point in time. The eval harness

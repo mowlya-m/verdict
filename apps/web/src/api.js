@@ -1,9 +1,9 @@
 /**
  * Client for the decision service.
  *
- * The engine is the source of truth for every outcome. The console renders
- * what it is told and computes nothing, which is why there is no decision
- * logic anywhere in this file.
+ * The engine is the source of truth for every outcome. This file transports
+ * and surfaces errors; it computes nothing. There is deliberately no decision
+ * logic anywhere in it.
  */
 
 const BASE = import.meta.env?.VITE_API_URL ?? '/api';
@@ -48,6 +48,15 @@ async function post(path, body, asAt) {
 }
 
 export const decideMotor = (claim, asAt) => post('/claims/motor/decide', claim, asAt);
+
+/**
+ * Read a claimant's own words into structured facts.
+ *
+ * Returns evidence, never an outcome. Feed the result to decideMotor once the
+ * gaps it reports in `missing` have been filled.
+ */
+export const extractIntake = (narrative, referenceDate) =>
+  post('/intake/extract', { narrative, reference_date: referenceDate ?? null });
 export const decideHealth = (claim, asAt) => post('/claims/health/decide', claim, asAt);
 
 export async function serviceUp() {

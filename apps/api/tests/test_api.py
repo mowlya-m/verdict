@@ -1,3 +1,4 @@
+import pytest
 from fastapi.testclient import TestClient
 
 from verdict.api.main import app
@@ -214,3 +215,72 @@ def test_api_is_deterministic():
     a = post("/claims/motor/decide", MOTOR).json()
     b = post("/claims/motor/decide", MOTOR).json()
     assert a == b
+
+
+# --- deployment safety ---
+
+
+def test_root_points_at_the_docs():
+    r = client.get("/")
+    assert r.status_code == 200
+    assert r.json()["docs"] == "/docs"
+
+
+def test_wildcard_origin_is_refused():
+    """A wildcard would let any site drive the engine from a visitor's browser."""
+    import importlib
+    import os
+
+    import verdict.api.main as m
+
+    old = os.environ.get("ALLOWED_ORIGINS")
+    os.environ["ALLOWED_ORIGINS"] = "*"
+    try:
+        with pytest.raises(RuntimeError):
+            importlib.reload(m)
+    finally:
+        if old is None:
+            os.environ.pop("ALLOWED_ORIGINS", None)
+        else:
+            os.environ["ALLOWED_ORIGINS"] = old
+        importlib.reload(m)
+
+
+def test_configured_origins_are_used():
+    import importlib
+    import os
+
+    import verdict.api.main as m
+
+    os.environ["ALLOWED_ORIGINS"] = "https://a.example, https://b.example"
+    try:
+        importlib.reload(m)
+        assert m.ALLOWED_ORIGINS == ["https://a.example", "https://b.example"]
+    finally:
+        os.environ.pop("ALLOWED_ORIGINS", None)
+        importlib.reload(m)
+
+
+# --- intake route ---
+
+
+def test_intake_rejects_a_too_short_narrative():
+    assert client.post("/intake/extract", json={"narrative": "hi"}).status_code == 422
+
+
+def test_intake_surfaces_upstream_failure_as_502(monkeypatch):
+    """A missing key is an operator problem, not a 500. Say so plainly."""
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    r = client.post(
+        "/intake/extract",
+        json={"narrative": "I was rear-ended at the lights on Swan Street yesterday."},
+    )
+    assert r.status_code == 502
+    assert "ANTHROPIC_API_KEY" in r.json()["detail"]
+
+
+def test_intake_response_schema_carries_no_outcome():
+    """ADR-0002, enforced at the wire as well as in the agent."""
+    schema = client.get("/openapi.json").json()["components"]["schemas"]["IntakeOut"]
+    forbidden = {"outcome", "covered", "payable", "confidence", "decision", "verdict"}
+    assert not (set(schema["properties"]) & forbidden)

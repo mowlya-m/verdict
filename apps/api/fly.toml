@@ -1,0 +1,34 @@
+app = "verdict-api-shy-lagoon-5002"
+primary_region = "syd"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8000"
+  # Tighten this to the deployed console origin. A wildcard here would let any
+  # site on the internet drive the decision engine from a visitor's browser.
+  ALLOWED_ORIGINS = "https://verdict-ochre.vercel.app"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = "suspend"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 60
+    hard_limit = 100
+
+  [[http_service.checks]]
+    grace_period = "8s"
+    interval = "30s"
+    method = "GET"
+    path = "/health"
+    timeout = "4s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

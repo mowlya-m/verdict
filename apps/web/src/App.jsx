@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import Landing from './Landing.jsx';
+import { ALL_CLAIMS, AS_AT } from './claims.js';
+import { decideMotor, decideHealth, serviceUp } from './api.js';
 
 /* ============================================================================
    VERDICT — full product surface
@@ -54,81 +56,28 @@ const money = (n) =>
 
 /* ------------------------------------------------------------------ claims */
 
-const CLAIMS = [
-  {
-    id: 'A10293', insured: 'D. Okafor', peril: 'Collision', dateOfLoss: '2026-08-04',
-    notified: '2026-08-05', quote: 2530, excess: 750, outcome: 'accept',
-    clock: { band: 'ok', daysRemaining: 108, consumed: 0.1 },
-    gates: [
-      { n: 1, name: 'Policy in force at date of loss', passed: true, basis: 'Cover ran 1 Jan to 31 Dec 2026. Loss dated 4 Aug.', citation: 'MTR-88213 · PDS 2025.11' },
-      { n: 2, name: 'Peril falls within an insuring clause', passed: true, basis: 'Collision matched to Collision damage.', citation: 'Clause 7.2' },
-      { n: 3, name: 'No exclusion applies', passed: true, basis: 'No exclusion matched the circumstances.' },
-      { n: 4, name: 'Evidence sufficient to decide', passed: true, basis: 'All required evidence on file.' },
-      { n: 5, name: 'Integrity checks', passed: true, basis: 'No material discrepancies.' },
-      { n: 6, name: 'Quantum within auto-settle ceiling', passed: true, basis: '$2,530.00 against a $5,000 ceiling.' },
-      { n: 7, name: 'No vulnerability signals', passed: true, basis: 'None detected.' },
-    ],
-  },
-  {
-    id: 'A10294', insured: 'T. Nguyen', peril: 'Collision', dateOfLoss: '2026-08-01',
-    notified: '2026-08-02', quote: 4900, excess: 750, outcome: 'escalate',
-    clock: { band: 'ok', daysRemaining: 105, consumed: 0.13 },
-    gates: [
-      { n: 1, name: 'Policy in force at date of loss', passed: true, basis: 'Cover ran 1 Jan to 31 Dec 2026. Loss dated 1 Aug.', citation: 'MTR-90114 · PDS 2025.11' },
-      { n: 2, name: 'Peril falls within an insuring clause', passed: true, basis: 'Collision matched to Collision damage.', citation: 'Clause 7.2' },
-      { n: 3, name: 'No exclusion applies', passed: true, basis: 'No exclusion matched the circumstances.' },
-      { n: 4, name: 'Evidence sufficient to decide', passed: true, basis: 'All required evidence on file.' },
-      { n: 5, name: 'Integrity checks', passed: false, basis: 'Score 7. Photo p1 was captured on 12 Jul, before the stated loss date. Photo p2 is perceptually identical to p1. The quote sits 250% above the top of the estimated band, and includes a tailgate that does not appear in the damage findings.' },
-      { n: 6, name: 'Quantum within auto-settle ceiling', passed: true, basis: '$4,900.00 against a $5,000 ceiling.' },
-      { n: 7, name: 'No vulnerability signals', passed: true, basis: 'None detected.' },
-    ],
-    escalation: ['Integrity score has reached the investigation threshold. A person decides this one, not the engine.'],
-  },
-  {
-    id: 'A10295', insured: 'R. Patel', peril: 'Theft', dateOfLoss: '2026-08-10',
-    notified: '2026-08-11', quote: null, excess: 750, outcome: 'request_evidence',
-    clock: { band: 'ok', daysRemaining: 114, consumed: 0.05 },
-    missing: ['Police report', 'Proof of purchase', 'Driver licence'],
-    gates: [
-      { n: 1, name: 'Policy in force at date of loss', passed: true, basis: 'Cover ran 1 Jan to 31 Dec 2026. Loss dated 10 Aug.', citation: 'MTR-77420 · PDS 2025.11' },
-      { n: 2, name: 'Peril falls within an insuring clause', passed: true, basis: 'Theft matched to Theft of vehicle.', citation: 'Clause 8.1' },
-      { n: 3, name: 'No exclusion applies', passed: true, basis: 'No exclusion matched the circumstances.' },
-      { n: 4, name: 'Evidence sufficient to decide', passed: false, basis: 'Missing a police report, proof of purchase and driver licence.' },
-      { n: 5, name: 'Integrity checks', passed: true, basis: 'No material discrepancies.' },
-      { n: 6, name: 'Quantum within auto-settle ceiling', passed: false, basis: 'Loss not yet quantifiable from the evidence supplied.' },
-      { n: 7, name: 'No vulnerability signals', passed: true, basis: 'None detected.' },
-    ],
-  },
-  {
-    id: 'A10287', insured: 'S. Alvarez', peril: 'Collision', dateOfLoss: '2026-04-02',
-    notified: '2026-04-06', quote: 3180, excess: 750, outcome: 'escalate',
-    clock: { band: 'breached', daysRemaining: -13, consumed: 1.11 },
-    gates: [
-      { n: 1, name: 'Policy in force at date of loss', passed: true, basis: 'Cover ran 1 Jan to 31 Dec 2026. Loss dated 2 Apr.', citation: 'MTR-61208 · PDS 2025.11' },
-      { n: 2, name: 'Peril falls within an insuring clause', passed: true, basis: 'Collision matched to Collision damage.', citation: 'Clause 7.2' },
-      { n: 3, name: 'No exclusion applies', passed: true, basis: 'No exclusion matched the circumstances.' },
-      { n: 4, name: 'Evidence sufficient to decide', passed: true, basis: 'All required evidence on file.' },
-      { n: 5, name: 'Integrity checks', passed: true, basis: 'No material discrepancies.' },
-      { n: 6, name: 'Quantum within auto-settle ceiling', passed: true, basis: '$3,180.00 against a $5,000 ceiling.' },
-      { n: 7, name: 'No vulnerability signals', passed: false, basis: 'Financial hardship disclosed in the claimant’s own words.' },
-    ],
-    escalation: ['Hardship disclosed. Route to a specialist handler.', 'The Code decision window has already passed. Deal with this one first.'],
-  },
-  {
-    id: 'A10291', insured: 'K. Brennan', peril: 'Collision', dateOfLoss: '2026-05-19',
-    notified: '2026-05-20', quote: 1420, excess: 750, outcome: 'decline',
-    clock: { band: 'at_risk', daysRemaining: 22, consumed: 0.82 },
-    gates: [
-      { n: 1, name: 'Policy in force at date of loss', passed: true, basis: 'Cover ran 1 Jan to 31 Dec 2026. Loss dated 19 May.', citation: 'MTR-52907 · PDS 2025.11' },
-      { n: 2, name: 'Peril falls within an insuring clause', passed: true, basis: 'Collision matched to Collision damage.', citation: 'Clause 7.2' },
-      { n: 3, name: 'No exclusion applies', passed: false, basis: 'Excluded. The driver was not licensed to drive the vehicle.', citation: 'Clause 9.4' },
-      { n: 4, name: 'Evidence sufficient to decide', passed: true, basis: 'All required evidence on file.' },
-      { n: 5, name: 'Integrity checks', passed: true, basis: 'No material discrepancies.' },
-      { n: 6, name: 'Quantum within auto-settle ceiling', passed: true, basis: '$1,420.00 against a $5,000 ceiling.' },
-      { n: 7, name: 'No vulnerability signals', passed: true, basis: 'None detected.' },
-    ],
-  },
-];
+/**
+ * Ask the engine to decide one claim.
+ *
+ * The console renders what it is told. It computes no outcome, derives no
+ * payable amount and infers no clock band. Everything below the API boundary
+ * is the engine's word.
+ */
+async function decideOne(entry) {
+  const fn = entry.kind === 'health' ? decideHealth : decideMotor;
+  const decision = await fn(entry.body, AS_AT);
+  return { ...entry, decision };
+}
+
+/** Decide the whole book, keeping failures alongside successes. */
+async function decideAll(entries) {
+  const settled = await Promise.allSettled(entries.map(decideOne));
+  return settled.map((r, i) =>
+    r.status === 'fulfilled'
+      ? r.value
+      : { ...entries[i], decision: null, error: r.reason?.message ?? 'Decision failed' },
+  );
+}
 
 const AGENT_RUN = [
   { at: 0.4, agent: 'Intake', line: 'Read 4 documents and 5 photos' },
@@ -359,28 +308,74 @@ function Processing({ onDone }) {
   );
 }
 
-function Outcome({ onConsole }) {
-  const c = CLAIMS[0];
+function Outcome({ decision, error, onConsole, onRetry }) {
+  if (error) {
+    return (
+      <section className="outcome">
+        <div className="ocard">
+          <Pill outcome="escalate">Not decided</Pill>
+          <h2>We could not decide this yet.</h2>
+          <p className="sub">{error}</p>
+          <div className="cta">
+            <button className="btn primary" onClick={onRetry}>Try again</button>
+            <button className="btn ghost" onClick={onConsole}>Open the console</button>
+          </div>
+        </div>
+      </section>
+    );
+  }
+  if (!decision) return null;
+
+  const clauses = decision.clauses_relied_on.join(', ');
+
   return (
     <section className="outcome">
       <div className="ocard">
-        <Pill outcome="accept">Approved</Pill>
-        <h2>Your claim is approved.</h2>
-        <p className="sub">Decided in 7 seconds. The Code allowed us 120 days.</p>
-        <dl className="sums">
-          <div><dt>Repair cost</dt><dd className="mono">{money(c.quote)}</dd></div>
-          <div><dt>Your excess</dt><dd className="mono">−{money(c.excess)}</dd></div>
-          <div className="tot"><dt>We pay</dt><dd className="mono">{money(c.quote - c.excess)}</dd></div>
-        </dl>
+        <Pill outcome={decision.outcome} />
+        <h2>
+          {decision.outcome === 'accept' && 'Your claim is approved.'}
+          {decision.outcome === 'partial' && 'Your claim is partly covered.'}
+          {decision.outcome === 'decline' && 'We cannot pay this claim.'}
+          {decision.outcome === 'request_evidence' && 'We need a little more from you.'}
+          {decision.outcome === 'escalate' && 'A person is looking at this.'}
+        </h2>
+        <p className="sub">
+          Decided in seconds. The Code allowed {decision.clock.days_remaining >= 0
+            ? `${decision.clock.days_remaining} more days`
+            : 'four months'}.
+        </p>
+
+        {decision.payable !== null && (
+          <dl className="sums">
+            <div>
+              <dt>Benefit assessed</dt>
+              <dd className="mono">{money(decision.payable + (decision.excess_applied ?? 0))}</dd>
+            </div>
+            <div>
+              <dt>Your excess</dt>
+              <dd className="mono">−{money(decision.excess_applied ?? 0)}</dd>
+            </div>
+            <div className="tot">
+              <dt>We pay</dt>
+              <dd className="mono">{money(decision.payable)}</dd>
+            </div>
+          </dl>
+        )}
+
         <div className="why">
           <span className="tiny">Why</span>
-          <p>
-            Your collision is covered under <b>clause 7.2</b> of PDS 2025.11, the wording that
-            applied on 4 August 2026. All seven checks passed.
-          </p>
+          <p>{decision.summary}</p>
+          {clauses && (
+            <p style={{ marginTop: 8, fontSize: 12.5, color: T.mute }}>
+              Relied on {clauses}.
+            </p>
+          )}
         </div>
+
         <div className="cta">
-          <button className="btn primary">Book the repair</button>
+          <button className="btn primary">
+            {decision.outcome === 'accept' ? 'Book the repair' : 'Contact us'}
+          </button>
           <button className="btn ghost" onClick={onConsole}>See how it was decided</button>
         </div>
       </div>
@@ -391,32 +386,92 @@ function Outcome({ onConsole }) {
 /* ----------------------------------------------------------- assessor view */
 
 function Console() {
-  const [sel, setSel] = useState('A10294');
+  const [book, setBook] = useState(null);          // null = still loading
+  const [sel, setSel] = useState(null);
+  const [product, setProduct] = useState('all');
   const [shown, setShown] = useState(0);
+  const [offline, setOffline] = useState(false);
   const timers = useRef([]);
-  const claim = CLAIMS.find((c) => c.id === sel);
+
+  // Decide the whole book once, on mount. Every gate on screen comes back
+  // from the engine; nothing here works out an outcome for itself.
+  useEffect(() => {
+    let live = true;
+    (async () => {
+      const up = await serviceUp();
+      if (!live) return;
+      setOffline(!up);
+      const decided = await decideAll(ALL_CLAIMS);
+      if (!live) return;
+      setBook(decided);
+      const firstInteresting =
+        decided.find((c) => c.decision && c.decision.outcome !== 'accept') ?? decided[0];
+      setSel(firstInteresting?.body.claim_id ?? null);
+    })();
+    return () => { live = false; };
+  }, []);
+
+  const visible = useMemo(
+    () => (book ?? []).filter((c) => product === 'all' || c.kind === product),
+    [book, product],
+  );
+  const claim = (book ?? []).find((c) => c.body.claim_id === sel) ?? null;
+  // The ?? [] fallback allocates a fresh array on every render, which would
+  // restart the trace animation continuously. Memoise so the effect only fires
+  // when the decision actually changes.
+  const gates = useMemo(() => claim?.decision?.gates ?? [], [claim?.decision]);
 
   useEffect(() => {
     timers.current.forEach(clearTimeout);
+    if (!gates.length) return;
     if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
-      setShown(7);
+      setShown(gates.length);
       return;
     }
     setShown(0);
-    timers.current = claim.gates.map((_, i) => setTimeout(() => setShown(i + 1), 80 * (i + 1)));
+    timers.current = gates.map((_, i) => setTimeout(() => setShown(i + 1), 80 * (i + 1)));
     return () => timers.current.forEach(clearTimeout);
-  }, [sel, claim.gates]);
+  }, [sel, gates]);
 
-  const stats = useMemo(
-    () => ({
-      auto: Math.round((CLAIMS.filter((c) => c.outcome === 'accept').length / CLAIMS.length) * 100),
-      breached: CLAIMS.filter((c) => c.clock.band === 'breached').length,
-    }),
-    []
-  );
+  const stats = useMemo(() => {
+    const decided = (book ?? []).filter((c) => c.decision);
+    if (!decided.length) return { auto: 0, breached: 0, n: 0 };
+    return {
+      n: decided.length,
+      auto: Math.round(
+        (decided.filter((c) => c.decision.outcome === 'accept').length / decided.length) * 100,
+      ),
+      breached: decided.filter((c) => c.decision.clock.band === 'breached').length,
+    };
+  }, [book]);
 
-  const o = OUTCOME[claim.outcome];
-  const done = shown >= claim.gates.length;
+  if (!book) {
+    return (
+      <section className="console">
+        <div className="loading">
+          <span className="spinner" aria-hidden="true" />
+          <p>Asking the engine to decide {ALL_CLAIMS.length} claims…</p>
+        </div>
+      </section>
+    );
+  }
+
+  if (offline) {
+    return (
+      <section className="console">
+        <div className="loading">
+          <h2 style={{ fontSize: 22 }}>The decision service is not running.</h2>
+          <p style={{ marginTop: 10, maxWidth: '46ch' }}>
+            Every outcome on this screen comes from the engine over HTTP, so there is
+            nothing to show without it. Start it with <code>make api</code>, then reload.
+          </p>
+        </div>
+      </section>
+    );
+  }
+
+  const o = claim?.decision ? OUTCOME[claim.decision.outcome] : null;
+  const done = shown >= gates.length && gates.length > 0;
 
   return (
     <section className="console">
@@ -436,94 +491,112 @@ function Console() {
 
       <div className="split">
         <aside className="queue">
-          {CLAIMS.map((c) => (
-            <button key={c.id} className="qrow" aria-current={sel === c.id} onClick={() => setSel(c.id)}>
+          <div className="qfilter">
+            {[['all', 'All'], ['motor', 'Motor'], ['health', 'Health']].map(([k, l]) => (
+              <button key={k} data-on={product === k} onClick={() => setProduct(k)}>{l}</button>
+            ))}
+          </div>
+          {visible.map((c) => (
+            <button
+              key={c.body.claim_id}
+              className="qrow"
+              aria-current={sel === c.body.claim_id}
+              onClick={() => setSel(c.body.claim_id)}
+            >
               <div className="qt">
-                <span className="mono tiny">{c.id}</span>
-                <Pill outcome={c.outcome} />
+                <span className="mono tiny">{c.body.claim_id}</span>
+                {c.decision ? <Pill outcome={c.decision.outcome} /> : <span className="tiny">error</span>}
               </div>
               <b>{c.insured}</b>
               <div className="qm">
-                <span>{c.peril} · {c.dateOfLoss}</span>
-                <span className="mono">{c.quote ? money(c.quote) : '—'}</span>
+                <span>{c.label}</span>
               </div>
-              <Rail clock={c.clock} />
+              {c.decision && <Rail clock={c.decision.clock} />}
             </button>
           ))}
         </aside>
 
         <main className="file">
-          <header className="fhead">
-            <div>
-              <span className="mono tiny">{claim.id}</span>
-              <h2>{claim.insured}</h2>
-              <p className="sub">{claim.peril} · loss {claim.dateOfLoss} · notified {claim.notified}</p>
-            </div>
-            <Ring clock={claim.clock} />
-          </header>
+          {!claim && <div className="loading"><p>Pick a claim.</p></div>}
 
-          <div className="trace">
-            <div className="th">
-              <span className="tiny">Validation trace</span>
-              <span className="mono tiny">{shown}/7</span>
+          {claim && claim.error && (
+            <div className="loading">
+              <h2 style={{ fontSize: 20 }}>{claim.body.claim_id} could not be decided</h2>
+              <p style={{ marginTop: 8 }}>{claim.error}</p>
             </div>
-            {claim.gates.map((g, i) => (
-              <div
-                key={g.n}
-                className="gate"
-                style={{ opacity: i < shown ? 1 : 0, transform: i < shown ? 'none' : 'translateY(4px)' }}
-              >
-                <span className="mono gn">{String(g.n).padStart(2, '0')}</span>
+          )}
+
+          {claim && claim.decision && (
+            <>
+              <header className="fhead">
                 <div>
-                  <b>{g.name}</b>
-                  <p>{g.basis}</p>
-                  {g.citation && <span className="mono cite">{g.citation}</span>}
+                  <span className="mono tiny">{claim.body.claim_id} · {claim.kind}</span>
+                  <h2>{claim.insured}</h2>
+                  <p className="sub">{claim.label}</p>
                 </div>
-                <span
-                  className="mark"
-                  style={{ background: g.passed ? T.okSoft : T.badSoft, color: g.passed ? T.ok : T.bad }}
-                >
-                  {g.passed ? 'PASS' : 'FAIL'}
+                <Ring clock={claim.decision.clock} />
+              </header>
+
+              <div className="trace">
+                <div className="th">
+                  <span className="tiny">Validation trace</span>
+                  <span className="mono tiny">{shown}/{gates.length}</span>
+                </div>
+                {gates.map((g, i) => (
+                  <div
+                    key={g.n}
+                    className="gate"
+                    style={{ opacity: i < shown ? 1 : 0, transform: i < shown ? 'none' : 'translateY(4px)' }}
+                  >
+                    <span className="mono gn">{String(g.n).padStart(2, '0')}</span>
+                    <div>
+                      <b>{g.name}</b>
+                      <p>{g.basis}</p>
+                      {g.citation && <span className="mono cite">{g.citation}</span>}
+                    </div>
+                    <span
+                      className="mark"
+                      style={{ background: g.passed ? T.okSoft : T.badSoft, color: g.passed ? T.ok : T.bad }}
+                    >
+                      {g.passed ? 'PASS' : 'FAIL'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="record" style={{ opacity: done ? 1 : 0.3 }}>
+                <div className="rhead" style={{ background: o.bg }}>
+                  <div className="rtop">
+                    <div>
+                      <span className="tiny">Reasons record</span>
+                      <b style={{ color: o.fg }}>{o.verb}</b>
+                    </div>
+                    <Pill outcome={claim.decision.outcome} />
+                  </div>
+                  <p>{claim.decision.summary}</p>
+                  {claim.decision.clauses_relied_on.length > 0 && (
+                    <span className="mono cite">
+                      relied on {claim.decision.clauses_relied_on.join(', ')}
+                    </span>
+                  )}
+                </div>
+                <div className="acts">
+                  <button className="btn primary sm">Authorise</button>
+                  <button className="btn ghost sm">Edit and authorise</button>
+                  <button className="btn ghost sm">Draft the letter</button>
+                </div>
+              </div>
+
+              <p className="note">
+                Every line above came back from <code>engine.decide()</code> over HTTP, a pure
+                function with no model call. This console computed none of it. There is no
+                confidence score on this page by design — the trace is the confidence.
+                <span className="mono" style={{ display: 'block', marginTop: 8 }}>
+                  engine {claim.decision.engine_version}
                 </span>
-              </div>
-            ))}
-          </div>
-
-          <div className="record" style={{ opacity: done ? 1 : 0.3 }}>
-            <div className="rhead" style={{ background: o.bg }}>
-              <div className="rtop">
-                <div>
-                  <span className="tiny">Reasons record</span>
-                  <b style={{ color: o.fg }}>{o.verb}</b>
-                </div>
-                <Pill outcome={claim.outcome} />
-              </div>
-              <p>
-                {claim.outcome === 'accept' &&
-                  `All seven gates cleared. We pay ${money(claim.quote - claim.excess)} after the ${money(claim.excess)} excess.`}
-                {claim.outcome === 'request_evidence' &&
-                  `Not decidable yet. Waiting on ${claim.missing.join(', ').toLowerCase()}.`}
-                {claim.outcome === 'decline' &&
-                  claim.gates.filter((g) => !g.passed).map((g) => g.basis).join(' ')}
-                {claim.outcome === 'escalate' && claim.escalation.join(' ')}
               </p>
-              <span className="mono cite">
-                relied on {claim.gates.filter((g) => g.citation).map((g) => g.citation.split(' · ').pop()).join(', ')}
-              </span>
-            </div>
-            <div className="acts">
-              <button className="btn primary sm">Authorise</button>
-              <button className="btn ghost sm">Edit and authorise</button>
-              <button className="btn ghost sm">Draft the letter</button>
-            </div>
-          </div>
-
-          <p className="note">
-            Every line above comes from <code>engine.decide()</code>, a pure function with no model call.
-            The agents that fed it returned clause identifiers, damaged parts and weighted discrepancies.
-            None of them returned a verdict. There is no confidence score on this page by design. The trace
-            is the confidence.
-          </p>
+            </>
+          )}
         </main>
       </div>
     </section>
