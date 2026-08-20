@@ -23,8 +23,8 @@ const C = {
   glass: 'rgba(255,255,255,0.045)',
   glassLine: 'rgba(255,255,255,0.10)',
   text: '#EAF2F5',
-  dim: 'rgba(234,242,245,0.58)',
-  faint: 'rgba(234,242,245,0.34)',
+  dim: 'rgba(234,242,245,0.78)',
+  faint: 'rgba(234,242,245,0.62)',
   pass: '#34D399',
   fail: '#FB7185',
   hold: '#FBBF24',
@@ -140,16 +140,24 @@ function useReveal() {
 
 function Corridor() {
   const wrap = useRef(null);
-  const [depth, setDepth] = useState(0);   // 0 → 1 across the section
-  const [tilt, setTilt] = useState({ x: 0, y: 0 });
+  const [step, setStep] = useState(0);
+  const [dir, setDir] = useState(1);
 
+  // Scroll drives which gate is showing. Each gate owns an equal slice of the
+  // pinned section, so the mapping is legible rather than a depth calculation
+  // nobody can reason about.
   const onScroll = useCallback(() => {
     const el = wrap.current;
     if (!el) return;
     const r = el.getBoundingClientRect();
     const total = r.height - window.innerHeight;
     if (total <= 0) return;
-    setDepth(Math.max(0, Math.min(1, -r.top / total)));
+    const p = Math.max(0, Math.min(0.9999, -r.top / total));
+    const next = Math.floor(p * GATES.length);
+    setStep((prev) => {
+      if (next !== prev) setDir(next > prev ? 1 : -1);
+      return next;
+    });
   }, []);
 
   useEffect(() => {
@@ -162,74 +170,64 @@ function Corridor() {
     };
   }, [onScroll]);
 
-  useEffect(() => {
-    if (prefersReduced()) return;
-    const onMove = (e) => {
-      setTilt({
-        x: (e.clientY / window.innerHeight - 0.5) * -7,
-        y: (e.clientX / window.innerWidth - 0.5) * 11,
-      });
-    };
-    window.addEventListener('pointermove', onMove);
-    return () => window.removeEventListener('pointermove', onMove);
-  }, []);
+  const go = (n) => {
+    const el = wrap.current;
+    if (!el) return;
+    const total = el.offsetHeight - window.innerHeight;
+    const target = el.offsetTop + (total * (n + 0.5)) / GATES.length;
+    window.scrollTo({ top: target, behavior: prefersReduced() ? 'auto' : 'smooth' });
+  };
 
-  const SPACING = 480;
-  const travel = depth * (GATES.length + 0.6) * SPACING;
-  const reached = Math.floor(travel / SPACING);
+  const g = GATES[step] ?? GATES[0];
+  const col = STATE_COLOR[g.state];
+  const cleared = GATES.slice(0, step + 1).filter((x) => x.state === 'pass').length;
 
   return (
-    <section className="corridor" ref={wrap}>
+    <section className="corridor" ref={wrap} aria-labelledby="corridor-h">
       <div className="corridor-sticky">
-        <div className="stage" style={{ transform: `rotateX(${tilt.x}deg) rotateY(${tilt.y}deg)` }}>
-          {GATES.map((g, i) => {
-            const z = i * SPACING - travel;
-            const passed = i < reached;
-            const active = i === reached;
-            const col = STATE_COLOR[g.state];
-            const visible = z > -420 && z < 1900;
-            return (
-              <div
-                key={g.n}
-                className="pane"
-                data-lit={passed || active}
-                style={{
-                  transform: `translate3d(-50%,-50%,${z}px)`,
-                  opacity: visible ? Math.max(0, Math.min(1, 1 - Math.abs(z - 260) / 1500)) : 0,
-                  borderColor: passed || active ? col : C.glassLine,
-                  boxShadow:
-                    passed || active
-                      ? `0 0 0 1px ${col}44, 0 24px 80px -30px ${col}88, inset 0 1px 0 rgba(255,255,255,.14)`
-                      : 'inset 0 1px 0 rgba(255,255,255,.08)',
-                }}
-              >
-                <span className="pane-n" style={{ color: passed || active ? col : C.faint }}>
-                  {String(g.n).padStart(2, '0')}
-                </span>
-                <h3>{g.name}</h3>
-                <p>{g.detail}</p>
-                <span className="pane-mark" style={{ color: col, borderColor: `${col}55` }}>
+        <h2 id="corridor-h" className="sr-only">How a claim is decided, gate by gate</h2>
+
+        {/* one card, one position. content swaps in place. */}
+        <div className="stagewrap">
+          <ol className="ticks" aria-hidden="true">
+            {GATES.map((x, i) => (
+              <li key={x.n} data-on={i <= step}
+                  style={{ background: i <= step ? STATE_COLOR[x.state] : undefined }} />
+            ))}
+          </ol>
+
+          <div className="cardslot">
+            <article
+              key={g.n}
+              className={dir > 0 ? 'gcard in-fwd' : 'gcard in-back'}
+              style={{ '--c': col }}
+              aria-live="polite"
+            >
+              <div className="gtop">
+                <span className="gnum">GATE {String(g.n).padStart(2, '0')} OF 07</span>
+                <span className="gmark" style={{ color: col, borderColor: col }}>
                   {g.state === 'pass' ? 'PASS' : g.state === 'fail' ? 'FAIL' : 'HOLD'}
                 </span>
               </div>
-            );
-          })}
-        </div>
+              <h3>{g.name}</h3>
+              <p>{g.detail}</p>
+              <p className="gwhy">
+                {g.state === 'pass'
+                  ? 'A rule was checked against the evidence and it held.'
+                  : 'The engine stops here and hands a person the reasoning, rather than guessing.'}
+              </p>
+            </article>
+          </div>
 
-        <div className="corridor-hud">
-          <span className="eyebrow">Claim A10294 · in flight</span>
-          <div className="hud-row">
-            <b>{Math.min(GATES.length, reached)}</b>
-            <span>of seven gates cleared</span>
+          <div className="pager">
+            <button onClick={() => go(Math.max(0, step - 1))} disabled={step === 0}
+                    aria-label="Previous gate">←</button>
+            <span className="pnum">
+              <b style={{ color: STATE_COLOR.pass }}>{cleared}</b> of seven cleared
+            </span>
+            <button onClick={() => go(Math.min(GATES.length - 1, step + 1))}
+                    disabled={step === GATES.length - 1} aria-label="Next gate">→</button>
           </div>
-          <div className="hud-bar">
-            <span style={{ width: `${Math.min(100, (reached / GATES.length) * 100)}%` }} />
-          </div>
-          <p className="hud-note">
-            {reached >= 5
-              ? 'Gate five failed. The engine holds the file and hands a person the reasoning.'
-              : 'Every gate is a rule, not a guess. Scroll to fly the claim through.'}
-          </p>
         </div>
       </div>
     </section>
@@ -527,32 +525,38 @@ const CSS = `
   border-radius:2px;background:var(--pass);animation:drop 1.9s ease-in-out infinite}
 @keyframes drop{0%,100%{transform:translateY(0);opacity:1}70%{transform:translateY(13px);opacity:0}}
 
-.corridor{height:560vh;position:relative}
-.corridor-sticky{position:sticky;top:0;height:100svh;overflow:hidden;
-  display:grid;place-items:center;perspective:1250px}
-.stage{position:absolute;inset:0;transform-style:preserve-3d;transition:transform .5s cubic-bezier(.2,.8,.2,1)}
-.pane{position:absolute;top:50%;left:50%;width:min(420px,84vw);padding:30px;
-  border-radius:22px;border:1px solid ${C.glassLine};background:rgba(255,255,255,.05);
-  backdrop-filter:blur(22px) saturate(1.3);-webkit-backdrop-filter:blur(22px) saturate(1.3);
-  transform-style:preserve-3d;text-align:left;
-  transition:border-color .45s ease,box-shadow .45s ease,opacity .35s linear}
-.pane-n{font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:.1em}
-.pane h3{font-size:23px;margin-top:10px}
-.pane p{margin-top:8px;font-size:14px;color:${C.dim}}
-.pane-mark{display:inline-block;margin-top:18px;padding:4px 11px;border-radius:6px;
-  border:1px solid;font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:.11em}
-.corridor-hud{position:absolute;left:50%;bottom:38px;transform:translateX(-50%);
-  width:min(560px,90vw);padding:22px 26px;border-radius:20px;background:rgba(4,16,26,.5);
-  border:1px solid ${C.glassLine};backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px);
-  text-align:center;z-index:5}
-.hud-row{display:flex;align-items:baseline;justify-content:center;gap:10px;margin-top:8px}
-.hud-row b{font-family:'JetBrains Mono',monospace;font-size:36px;font-weight:500;
-  letter-spacing:-.04em;color:var(--pass)}
-.hud-row span{font-size:13.5px;color:${C.dim}}
-.hud-bar{height:3px;border-radius:2px;background:rgba(255,255,255,.1);overflow:hidden;margin-top:14px}
-.hud-bar span{display:block;height:100%;background:linear-gradient(90deg,var(--pass),var(--plum));
-  transition:width .35s ease}
-.hud-note{margin-top:13px;font-size:12.5px;color:${C.faint}}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+
+.corridor{height:420vh;position:relative}
+.corridor-sticky{position:sticky;top:0;height:100svh;display:grid;place-items:center;padding:90px 24px 40px}
+.stagewrap{width:min(680px,100%);display:grid;gap:26px;justify-items:center}
+.ticks{display:flex;gap:7px;list-style:none;margin:0;padding:0}
+.ticks li{width:34px;height:3px;border-radius:2px;background:rgba(255,255,255,.14);transition:background .35s ease}
+.cardslot{position:relative;width:100%;min-height:290px;display:grid}
+.gcard{grid-area:1/1;padding:38px 40px;border-radius:24px;
+  background:rgba(255,255,255,.055);border:1px solid rgba(255,255,255,.13);
+  backdrop-filter:blur(24px) saturate(1.2);-webkit-backdrop-filter:blur(24px) saturate(1.2);
+  box-shadow:0 30px 90px -50px var(--c),inset 0 1px 0 rgba(255,255,255,.10);
+  border-left:3px solid var(--c)}
+@keyframes slideFwd{from{opacity:0;transform:translateY(22px) scale(.985)}to{opacity:1;transform:none}}
+@keyframes slideBack{from{opacity:0;transform:translateY(-22px) scale(.985)}to{opacity:1;transform:none}}
+.in-fwd{animation:slideFwd .42s cubic-bezier(.22,.9,.26,1) both}
+.in-back{animation:slideBack .42s cubic-bezier(.22,.9,.26,1) both}
+.gtop{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}
+.gnum{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.16em;color:rgba(234,242,245,.62)}
+.gmark{padding:4px 11px;border-radius:6px;border:1px solid;font-family:'JetBrains Mono',monospace;
+  font-size:10.5px;font-weight:500;letter-spacing:.12em}
+.gcard h3{margin-top:20px;font-size:clamp(26px,3.6vw,38px)}
+.gcard p{margin-top:14px;font-size:17px;color:rgba(234,242,245,.80);max-width:46ch}
+.gwhy{margin-top:16px!important;font-size:14.5px!important;color:rgba(234,242,245,.60)!important}
+.pager{display:flex;align-items:center;gap:18px}
+.pager button{width:42px;height:42px;border-radius:50%;font-size:17px;
+  background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);color:#EAF2F5;
+  transition:background .2s ease,transform .2s ease}
+.pager button:hover:not(:disabled){background:rgba(255,255,255,.13);transform:translateY(-2px)}
+.pager button:disabled{opacity:.32;cursor:not-allowed}
+.pnum{font-size:14px;color:rgba(234,242,245,.72)}
+.pnum b{font-family:'JetBrains Mono',monospace;font-size:19px}
 
 .principle,.proof,.close{max-width:1120px;margin:0 auto;padding:130px 30px}
 .principle,.proof,.close{opacity:0;transform:translateY(26px);
@@ -591,10 +595,9 @@ const CSS = `
 @media(prefers-reduced-motion:reduce){
   .vd *{transition:none!important;animation:none!important}
   .corridor{height:auto}
-  .corridor-sticky{position:static;height:auto;padding:80px 30px;perspective:none}
-  .stage{position:static;transform:none!important;display:grid;gap:16px}
-  .pane{position:static;transform:none!important;opacity:1!important;width:100%}
-  .corridor-hud{position:static;transform:none;margin:24px auto 0}
+  .corridor-sticky{position:static;height:auto;padding:70px 24px}
+  .cardslot{min-height:0}
+  .in-fwd,.in-back{animation:none}
   .principle,.proof,.close{opacity:1;transform:none}
 }
 `;
