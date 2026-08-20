@@ -1,0 +1,23 @@
+# Render blueprint. Free tier, no card.
+#
+# Trade-off worth knowing: a free instance spins down after 15 minutes idle and
+# the next request waits roughly 50 seconds while it starts again. Everything
+# after that is immediate. For a portfolio build that is the right trade; before
+# a live demo, hit the URL once to wake it.
+services:
+  - type: web
+    name: verdict-api
+    runtime: docker
+    plan: free
+    region: singapore          # closest Render region to Melbourne
+    rootDir: apps/api
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      # Set this to the deployed console origin once Vercel gives you a URL.
+      # A wildcard is refused at boot; see test_wildcard_origin_is_refused.
+      - key: ALLOWED_ORIGINS
+        sync: false
+      - key: PYTHONUNBUFFERED
+        value: "1"

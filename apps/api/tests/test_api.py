@@ -1,3 +1,4 @@
+import pytest
 from fastapi.testclient import TestClient
 
 from verdict.api.main import app
@@ -214,3 +215,47 @@ def test_api_is_deterministic():
     a = post("/claims/motor/decide", MOTOR).json()
     b = post("/claims/motor/decide", MOTOR).json()
     assert a == b
+
+
+# --- deployment safety ---
+
+
+def test_root_points_at_the_docs():
+    r = client.get("/")
+    assert r.status_code == 200
+    assert r.json()["docs"] == "/docs"
+
+
+def test_wildcard_origin_is_refused():
+    """A wildcard would let any site drive the engine from a visitor's browser."""
+    import importlib
+    import os
+
+    import verdict.api.main as m
+
+    old = os.environ.get("ALLOWED_ORIGINS")
+    os.environ["ALLOWED_ORIGINS"] = "*"
+    try:
+        with pytest.raises(RuntimeError):
+            importlib.reload(m)
+    finally:
+        if old is None:
+            os.environ.pop("ALLOWED_ORIGINS", None)
+        else:
+            os.environ["ALLOWED_ORIGINS"] = old
+        importlib.reload(m)
+
+
+def test_configured_origins_are_used():
+    import importlib
+    import os
+
+    import verdict.api.main as m
+
+    os.environ["ALLOWED_ORIGINS"] = "https://a.example, https://b.example"
+    try:
+        importlib.reload(m)
+        assert m.ALLOWED_ORIGINS == ["https://a.example", "https://b.example"]
+    finally:
+        os.environ.pop("ALLOWED_ORIGINS", None)
+        importlib.reload(m)

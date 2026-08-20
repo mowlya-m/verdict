@@ -1,0 +1,45 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/api/**'
+      - '.github/workflows/deploy.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-api
+  cancel-in-progress: false
+
+jobs:
+  api:
+    name: API to Fly
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      # Never ship a container the suite has not passed against.
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install -e 'apps/api[dev]'
+      - run: python -m pytest apps/api/tests -q
+
+      - name: Build the image locally first
+        run: docker build -t verdict-api:ci apps/api
+
+      - name: Smoke test the container
+        run: |
+          docker run -d --name smoke -p 8000:8000 \
+            -e ALLOWED_ORIGINS=https://example.test verdict-api:ci
+          for i in $(seq 1 20); do
+            curl -fs localhost:8000/health && break || sleep 1
+          done
+          curl -fs localhost:8000/health | grep -q '"status":"ok"'
+          docker rm -f smoke
+
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - run: flyctl deploy --remote-only --config apps/api/fly.toml --dockerfile apps/api/Dockerfile
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}

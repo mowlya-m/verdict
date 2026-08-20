@@ -13,6 +13,7 @@ Docs at /docs, schema at /openapi.json.
 from __future__ import annotations
 
 import logging
+import os
 from datetime import date
 
 from fastapi import FastAPI, HTTPException
@@ -45,13 +46,23 @@ app = FastAPI(
     ),
 )
 
-# The console runs on a different origin in development. Tighten this to the
-# deployed origin before anything real is behind it.
+# Origins come from the environment so the deployed console can be allowed
+# without a code change, and so a wildcard cannot reach production by accident.
+# A wildcard here would let any site on the internet drive the decision engine
+# from a visitor's browser.
+DEV_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"]
+_configured = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "").split(",") if o.strip()]
+ALLOWED_ORIGINS = _configured or DEV_ORIGINS
+
+if "*" in ALLOWED_ORIGINS:
+    raise RuntimeError("ALLOWED_ORIGINS must name origins explicitly. Wildcards are refused.")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_methods=["GET", "POST"],
-    allow_headers=["*"],
+    allow_headers=["Content-Type"],
+    max_age=600,
 )
 
 
@@ -59,6 +70,12 @@ app.add_middleware(
 def healthcheck() -> dict[str, str]:
     """Liveness probe. Named for the convention, unrelated to health insurance."""
     return {"status": "ok", "engine": ENGINE_VERSION}
+
+
+@app.get("/", include_in_schema=False)
+def root() -> dict[str, str]:
+    """Point a curious visitor at the docs rather than returning a bare 404."""
+    return {"service": "verdict", "version": ENGINE_VERSION, "docs": "/docs"}
 
 
 @app.post(
