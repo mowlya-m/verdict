@@ -8,7 +8,42 @@ last step, not the first.
 
 ---
 
-## 1. API to Fly
+## Choosing a host
+
+| | Cost | Cold start | Card |
+|---|---|---|---|
+| **Render** | free | ~50s after 15 min idle | no |
+| **Fly** | ~$5/month minimum | ~2s after idle | yes |
+
+Render for a portfolio build. Fly if you are showing it to a design partner and
+cannot afford the pause. Both use the same Dockerfile; only the config differs.
+
+---
+
+## 1a. API to Render (free, no card)
+
+Sign up at <https://render.com> with GitHub, then:
+
+1. **New** → **Blueprint**
+2. Point it at `mowlya-m/verdict`
+3. It reads `render.yaml` and offers a `verdict-api` service
+4. Leave `ALLOWED_ORIGINS` blank for now; you will set it in step 3
+5. **Apply**
+
+First build takes a few minutes. When it finishes:
+
+```bash
+curl https://verdict-api.onrender.com/health
+```
+
+You want `{"status":"ok","engine":"0.7.0"}`. Docs at `/docs`.
+
+`autoDeploy: true` means every push to `main` redeploys, so the GitHub Actions
+workflow is only needed if you move to Fly.
+
+---
+
+## 1b. API to Fly (paid, faster)
 
 ```bash
 brew install flyctl
@@ -81,6 +116,8 @@ The API only accepts browser requests from origins you name. Point it at the
 Vercel URL you just got:
 
 ```bash
+# Render: Dashboard → verdict-api → Environment → add ALLOWED_ORIGINS
+# Fly:
 flyctl secrets set ALLOWED_ORIGINS="https://verdict-claims.vercel.app" \
   --config apps/api/fly.toml
 ```
