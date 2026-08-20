@@ -1,4 +1,4 @@
-app = "verdict-api"
+app = "verdict-api-shy-lagoon-5002"
 primary_region = "syd"
 
 [build]
@@ -8,7 +8,7 @@ primary_region = "syd"
   PORT = "8000"
   # Tighten this to the deployed console origin. A wildcard here would let any
   # site on the internet drive the decision engine from a visitor's browser.
-  ALLOWED_ORIGINS = "https://verdict-claims.vercel.app"
+  ALLOWED_ORIGINS = "https://verdict-ochre.vercel.app"
 
 [http_service]
   internal_port = 8000

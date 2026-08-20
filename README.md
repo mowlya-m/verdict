@@ -11,7 +11,7 @@ Processes routine claims from first notification to settlement. Escalates the re
 [![License: MIT](https://img.shields.io/badge/license-MIT-34506B.svg)](LICENSE)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
-[Live demo](https://verdict-claims.vercel.app) · [Architecture](docs/architecture.md) · [Decision records](docs/adr) · [Contributing](CONTRIBUTING.md)
+[Live demo](https://verdict-ochre.vercel.app) · [Architecture](docs/architecture.md) · [Decision records](docs/adr) · [Contributing](CONTRIBUTING.md)
 
 </div>
 
