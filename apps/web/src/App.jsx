@@ -20,26 +20,33 @@ import { decideMotor, decideHealth, counterfactual, serviceUp } from './api.js';
    ========================================================================== */
 
 const T = {
-  ink: '#0F2A33',
-  petrol: '#1B4A5A',
-  plum: '#7A2E5A',
-  plumSoft: '#F7EDF2',
-  paper: '#FAF8F5',
-  sand: '#EFE9E0',
-  rule: '#DDD6CB',
-  ruleSoft: '#EBE6DD',
+  // One design system, shared with Landing.jsx. Every value measured against
+  // white: nothing here is below the 4.5:1 WCAG AA floor for body text.
+  //
+  // Key names are kept from the previous palette so the stylesheet below did
+  // not need rewriting, but `plum` and `petrol` now both resolve to the single
+  // cerulean accent. There is one accent in this product, not three.
+  ink: '#0E2438',        // headings, chrome            15.8:1
+  petrol: '#0B6E99',     // accent, kept for the request-evidence state
+  plum: '#0B6E99',       // accent: links, CTAs, focus   5.7:1
+  plumSoft: '#EBF4F9',
+  paper: '#F4F7F9',
+  sand: '#EDF1F4',
+  rule: '#DDE4EA',
+  ruleSoft: '#E9EEF2',
   card: '#FFFFFF',
-  body: '#3D4750',
-  mute: '#7C858E',
-  ok: '#1B6B4A',
-  okSoft: '#E6F1EC',
-  warn: '#B0731C',
+  body: '#3D4E5C',       //                              8.6:1
+  mute: '#5A6B78',       // was #7C858E at 3.5:1, which failed AA
+  ok: '#0E7C4A',         //                              5.3:1
+  okSoft: '#E6F4EC',
+  warn: '#9A5B06',       // was #B0731C at 3.7:1, which failed AA
   warnSoft: '#FBF2E2',
-  bad: '#A02A2A',
-  badSoft: '#F8EAEA',
+  bad: '#B42318',        //                              6.6:1
+  badSoft: '#FBEAE8',
 };
 
-const DISPLAY = "'Familjen Grotesk', 'Helvetica Neue', sans-serif";
+// Landing dropped the display face. One type system, one voice.
+const DISPLAY = "'Public Sans', -apple-system, BlinkMacSystemFont, sans-serif";
 const BODY = "'Public Sans', -apple-system, BlinkMacSystemFont, sans-serif";
 const MONO = "'JetBrains Mono', ui-monospace, SFMono-Regular, monospace";
 
@@ -601,7 +608,7 @@ function Console() {
       </div>
 
       <div className="split">
-        <aside className="queue">
+        <aside className="queue" aria-label="Claim queue">
           <div className="qfilter">
             {[['all', 'All'], ['motor', 'Motor'], ['health', 'Health']].map(([k, l]) => (
               <button key={k} data-on={product === k} onClick={() => setProduct(k)}>{l}</button>
@@ -627,7 +634,7 @@ function Console() {
           ))}
         </aside>
 
-        <main className="file">
+        <section className="file" aria-label="Claim detail">
           {!claim && <div className="loading"><p>Pick a claim.</p></div>}
 
           {claim && claim.error && (
@@ -675,7 +682,12 @@ function Console() {
                 ))}
               </div>
 
-              <div className="record" style={{ opacity: done ? 1 : 0.3 }}>
+              <div
+                className="record"
+                style={{ opacity: done ? 1 : 0.3 }}
+                aria-live="polite"
+                aria-atomic="true"
+              >
                 <div className="rhead" style={{ background: o.bg }}>
                   <div className="rtop">
                     <div>
@@ -712,7 +724,7 @@ function Console() {
               </p>
             </>
           )}
-        </main>
+        </section>
       </div>
     </section>
   );
@@ -730,6 +742,7 @@ export default function App() {
   return (
     <div className="app">
       <style>{CSS}</style>
+      <a className="skip" href="#main">Skip to content</a>
       <header className="shell">
         <button className="brand" onClick={() => setView('landing')}>
           <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
@@ -744,11 +757,14 @@ export default function App() {
         </nav>
       </header>
 
+      <main id="main">
       {view === 'home' && <Hero onStart={() => setView('lodge')} />}
       {view === 'lodge' && <Lodge onSubmit={() => setView('processing')} />}
       {view === 'processing' && <Processing onDone={() => setView('outcome')} />}
       {view === 'outcome' && <Outcome onConsole={() => setView('console')} />}
       {view === 'console' && <Console />}
+
+      </main>
 
       <footer className="foot">
         <span>Verdict · autonomous claims processing for Australian general insurance</span>
@@ -761,8 +777,11 @@ export default function App() {
 /* --------------------------------------------------------------------- css */
 
 const CSS = `
-@import url('https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@400;500;600;700&family=Public+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 *{box-sizing:border-box}
+.skip{position:absolute;left:-9999px;top:0;z-index:100;background:${T.ink};color:#fff;
+  padding:12px 18px;border-radius:0 0 8px 0;font-weight:600}
+.skip:focus{left:0}
 .app{background:${T.paper};color:${T.ink};font-family:${BODY};font-size:15px;line-height:1.6;min-height:100vh}
 .app h1,.app h2,.app h3{font-family:${DISPLAY};font-weight:600;letter-spacing:-.025em;margin:0;line-height:1.1}
 .app p{margin:0}
