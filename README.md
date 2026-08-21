@@ -164,6 +164,8 @@ make api          # uvicorn on :8000, docs at /docs
 |---|---|
 | `POST /claims/motor/decide` | Decide a motor or home claim |
 | `POST /claims/health/decide` | Decide a private health claim |
+| `POST /claims/motor/counterfactual` | What single change would alter this outcome |
+| `POST /claims/motor/explain/{gate}` | How much rests on one gate |
 | `POST /intake/extract` | Read a claimant's own words into structured facts |
 | `GET /health` | Liveness |
 
