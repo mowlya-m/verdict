@@ -20,6 +20,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from verdict.agents.intake import IntakeError, extract
+from verdict.counterfactual import explain_gate, explore
 from verdict.engine import decide
 from verdict.health_engine import decide_health
 
@@ -31,12 +32,14 @@ from .mapping import (
     to_service,
 )
 from .models import (
+    CounterfactualOut,
     DamageOut,
     DecisionOut,
     ErrorOut,
     HealthClaimIn,
     IntakeIn,
     IntakeOut,
+    LeverOut,
     MotorClaimIn,
 )
 
@@ -182,3 +185,55 @@ def intake(body: IntakeIn) -> IntakeOut:
         unresolved=e.unresolved,
         ready_to_decide=e.ready_to_decide,
     )
+
+
+@app.post(
+    "/claims/motor/counterfactual",
+    response_model=CounterfactualOut,
+    responses={422: {"model": ErrorOut}},
+    tags=["decisions"],
+)
+def motor_counterfactual(body: MotorClaimIn, as_at: date | None = None) -> CounterfactualOut:
+    """Report what would have to be different for this claim to come out otherwise.
+
+    Each lever is the engine re-run with one fact changed, so the money is
+    arithmetic rather than a guess. Facts a claimant could only change by
+    misrepresenting the loss are never offered; where one is decisive it is
+    reported as `immovable` with a null outcome.
+
+    `is_settled` is the most useful field. True means stop chasing.
+    """
+    try:
+        cf = explore(to_claim(body), today=as_at)
+    except (ValueError, KeyError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    return CounterfactualOut(
+        current=cf.current.value,
+        summary=cf.summary(),
+        is_settled=cf.is_settled,
+        levers=[
+            LeverOut(
+                kind=x.kind.value,
+                action=x.action,
+                because=x.because,
+                outcome=x.outcome.value if x.outcome else None,
+                payable_delta=x.payable_delta,
+                gate_cleared=x.gate_cleared,
+                gaps_closed=x.gaps_closed,
+                decisive=x.decisive,
+                progresses=x.progresses,
+            )
+            for x in cf.levers
+        ],
+    )
+
+
+@app.post("/claims/motor/explain/{gate}", response_model=dict[str, str], tags=["decisions"])
+def motor_explain(gate: int, body: MotorClaimIn, as_at: date | None = None) -> dict[str, str]:
+    """How much rests on one gate.
+
+    Answers the assessor's real question, which is never what a gate checks but
+    whether it is the thing deciding the claim.
+    """
+    return {"gate": str(gate), "explanation": explain_gate(to_claim(body), gate, today=as_at)}
