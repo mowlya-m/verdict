@@ -48,6 +48,15 @@ async function post(path, body, asAt) {
 }
 
 export const decideMotor = (claim, asAt) => post('/claims/motor/decide', claim, asAt);
+
+/**
+ * Read a claimant's own words into structured facts.
+ *
+ * Returns evidence, never an outcome. Feed the result to decideMotor once the
+ * gaps it reports in `missing` have been filled.
+ */
+export const extractIntake = (narrative, referenceDate) =>
+  post('/intake/extract', { narrative, reference_date: referenceDate ?? null });
 export const decideHealth = (claim, asAt) => post('/claims/health/decide', claim, asAt);
 
 export async function serviceUp() {

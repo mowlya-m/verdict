@@ -164,6 +164,7 @@ make api          # uvicorn on :8000, docs at /docs
 |---|---|
 | `POST /claims/motor/decide` | Decide a motor or home claim |
 | `POST /claims/health/decide` | Decide a private health claim |
+| `POST /intake/extract` | Read a claimant's own words into structured facts |
 | `GET /health` | Liveness |
 
 `?as_at=YYYY-MM-DD` fixes the Code clock at a point in time. The eval harness

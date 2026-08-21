@@ -172,3 +172,51 @@ class DecisionOut(BaseModel):
 
 class ErrorOut(BaseModel):
     detail: str
+
+
+class IntakeIn(BaseModel):
+    """A claimant's own account of what happened."""
+
+    narrative: str = Field(
+        ...,
+        min_length=10,
+        max_length=8000,
+        examples=[
+            "I was stopped at the lights on Swan Street and the car behind "
+            "went into my rear bumper."
+        ],
+    )
+    reference_date: date | None = Field(
+        None,
+        description="Resolves relative dates such as 'last Tuesday'. Defaults to today.",
+    )
+
+
+class DamageOut(BaseModel):
+    part: str
+    severity: Literal["light", "moderate", "heavy", "undeterminable"]
+    quote: str = ""
+
+
+class IntakeOut(BaseModel):
+    """Facts read out of the narrative.
+
+    There is no field here capable of expressing an outcome, and that is
+    deliberate rather than incidental. See ADR-0002.
+    """
+
+    peril: str
+    date_of_loss: date | None
+    time_of_day: str | None
+    location: str | None
+    summary: str
+    parties: list[str]
+    damage: list[DamageOut]
+    injuries_reported: bool | None
+    police_involved: bool | None
+    third_party_details_exchanged: bool | None
+    vulnerability_signals: list[str]
+    missing: list[str]
+    quotes: dict[str, str]
+    unresolved: list[str]
+    ready_to_decide: bool

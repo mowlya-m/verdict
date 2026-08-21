@@ -259,3 +259,28 @@ def test_configured_origins_are_used():
     finally:
         os.environ.pop("ALLOWED_ORIGINS", None)
         importlib.reload(m)
+
+
+# --- intake route ---
+
+
+def test_intake_rejects_a_too_short_narrative():
+    assert client.post("/intake/extract", json={"narrative": "hi"}).status_code == 422
+
+
+def test_intake_surfaces_upstream_failure_as_502(monkeypatch):
+    """A missing key is an operator problem, not a 500. Say so plainly."""
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    r = client.post(
+        "/intake/extract",
+        json={"narrative": "I was rear-ended at the lights on Swan Street yesterday."},
+    )
+    assert r.status_code == 502
+    assert "ANTHROPIC_API_KEY" in r.json()["detail"]
+
+
+def test_intake_response_schema_carries_no_outcome():
+    """ADR-0002, enforced at the wire as well as in the agent."""
+    schema = client.get("/openapi.json").json()["components"]["schemas"]["IntakeOut"]
+    forbidden = {"outcome", "covered", "payable", "confidence", "decision", "verdict"}
+    assert not (set(schema["properties"]) & forbidden)
