@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import Landing from './Landing.jsx';
 import { ALL_CLAIMS, AS_AT } from './claims.js';
-import { decideMotor, decideHealth, serviceUp } from './api.js';
+import { decideMotor, decideHealth, counterfactual, serviceUp } from './api.js';
 
 /* ============================================================================
    VERDICT — full product surface
@@ -20,26 +20,33 @@ import { decideMotor, decideHealth, serviceUp } from './api.js';
    ========================================================================== */
 
 const T = {
-  ink: '#0F2A33',
-  petrol: '#1B4A5A',
-  plum: '#7A2E5A',
-  plumSoft: '#F7EDF2',
-  paper: '#FAF8F5',
-  sand: '#EFE9E0',
-  rule: '#DDD6CB',
-  ruleSoft: '#EBE6DD',
+  // One design system, shared with Landing.jsx. Every value measured against
+  // white: nothing here is below the 4.5:1 WCAG AA floor for body text.
+  //
+  // Key names are kept from the previous palette so the stylesheet below did
+  // not need rewriting, but `plum` and `petrol` now both resolve to the single
+  // cerulean accent. There is one accent in this product, not three.
+  ink: '#0E2438',        // headings, chrome            15.8:1
+  petrol: '#0B6E99',     // accent, kept for the request-evidence state
+  plum: '#0B6E99',       // accent: links, CTAs, focus   5.7:1
+  plumSoft: '#EBF4F9',
+  paper: '#F4F7F9',
+  sand: '#EDF1F4',
+  rule: '#DDE4EA',
+  ruleSoft: '#E9EEF2',
   card: '#FFFFFF',
-  body: '#3D4750',
-  mute: '#7C858E',
-  ok: '#1B6B4A',
-  okSoft: '#E6F1EC',
-  warn: '#B0731C',
+  body: '#3D4E5C',       //                              8.6:1
+  mute: '#5A6B78',       // was #7C858E at 3.5:1, which failed AA
+  ok: '#0E7C4A',         //                              5.3:1
+  okSoft: '#E6F4EC',
+  warn: '#9A5B06',       // was #B0731C at 3.7:1, which failed AA
   warnSoft: '#FBF2E2',
-  bad: '#A02A2A',
-  badSoft: '#F8EAEA',
+  bad: '#B42318',        //                              6.6:1
+  badSoft: '#FBEAE8',
 };
 
-const DISPLAY = "'Familjen Grotesk', 'Helvetica Neue', sans-serif";
+// Landing dropped the display face. One type system, one voice.
+const DISPLAY = "'Public Sans', -apple-system, BlinkMacSystemFont, sans-serif";
 const BODY = "'Public Sans', -apple-system, BlinkMacSystemFont, sans-serif";
 const MONO = "'JetBrains Mono', ui-monospace, SFMono-Regular, monospace";
 
@@ -385,6 +392,117 @@ function Outcome({ decision, error, onConsole, onRetry }) {
 
 /* ----------------------------------------------------------- assessor view */
 
+
+/* ------------------------------------------------------- counterfactual panel
+
+   Sits under the reasons record because it answers the question a person has
+   the moment they read one: is there a way forward, or is this finished.
+
+   Levers arrive already ordered and already classified. This renders them; it
+   decides nothing. An immovable fact carries no outcome and no money, so there
+   is deliberately no path here that could make one look actionable.
+   ---------------------------------------------------------------------------- */
+
+const LEVER_KIND = {
+  claimant: { label: 'The claimant can do this', c: T.accent },
+  insurer: { label: 'We do this', c: T.petrol },
+  practitioner: { label: 'A practitioner must do this', c: T.warn },
+  immovable: { label: 'Cannot change', c: T.mute },
+};
+
+function Counterfactual({ payload, asAt }) {
+  const [state, setState] = useState({ status: 'idle' });
+
+  const load = useCallback(async () => {
+    setState({ status: 'loading' });
+    try {
+      setState({ status: 'ready', data: await counterfactual(payload, asAt) });
+    } catch (err) {
+      setState({ status: 'error', message: err.message });
+    }
+  }, [payload, asAt]);
+
+  if (state.status === 'idle') {
+    return (
+      <div className="cf cf-idle">
+        <div>
+          <b>What would change this?</b>
+          <p>Re-runs the decision with one fact altered at a time.</p>
+        </div>
+        <button className="btn ghost sm" onClick={load}>Work it out</button>
+      </div>
+    );
+  }
+
+  if (state.status === 'loading') {
+    return <div className="cf cf-idle"><p>Re-running the decision…</p></div>;
+  }
+
+  if (state.status === 'error') {
+    return (
+      <div className="cf cf-idle">
+        <p style={{ color: T.bad }}>{state.message}</p>
+        <button className="btn ghost sm" onClick={load}>Try again</button>
+      </div>
+    );
+  }
+
+  const { data } = state;
+
+  if (!data.levers.length) {
+    return (
+      <div className="cf cf-idle">
+        <p style={{ color: T.ok }}>{data.summary}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="cf">
+      <div className="cf-head">
+        <span className="tiny">What would change this</span>
+        {data.is_settled && <span className="cf-settled">Nothing further to chase</span>}
+      </div>
+      <p className="cf-sum">{data.summary}</p>
+
+      <ul className="cf-list">
+        {data.levers.map((x, i) => {
+          const kind = LEVER_KIND[x.kind] ?? LEVER_KIND.immovable;
+          return (
+            <li key={i} className="cf-item" data-immovable={x.kind === 'immovable'}>
+              <span className="cf-bar" style={{ background: kind.c }} />
+              <div className="cf-body">
+                <div className="cf-top">
+                  <b>{x.action}</b>
+                  {/* Money only ever appears where a real re-run produced it. */}
+                  {x.payable_delta > 0 && (
+                    <span className="cf-money mono">
+                      +${x.payable_delta.toLocaleString('en-AU')}
+                    </span>
+                  )}
+                </div>
+                <p>{x.because}</p>
+                <div className="cf-tags">
+                  <span style={{ color: kind.c }}>{kind.label}</span>
+                  {x.decisive && <span className="cf-tag cf-yes">Settles the claim</span>}
+                  {x.progresses && <span className="cf-tag">Closes {x.gaps_closed} gap{x.gaps_closed === 1 ? '' : 's'}</span>}
+                  {x.gate_cleared && <span className="cf-tag cf-gate">{x.gate_cleared}</span>}
+                </div>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+
+      <p className="cf-note">
+        Every figure above is <code>engine.decide()</code> re-run with one fact changed, not
+        an estimate. Facts that could only change by misrepresenting the loss are never
+        offered as options.
+      </p>
+    </div>
+  );
+}
+
 function Console() {
   const [book, setBook] = useState(null);          // null = still loading
   const [sel, setSel] = useState(null);
@@ -490,7 +608,7 @@ function Console() {
       </div>
 
       <div className="split">
-        <aside className="queue">
+        <aside className="queue" aria-label="Claim queue">
           <div className="qfilter">
             {[['all', 'All'], ['motor', 'Motor'], ['health', 'Health']].map(([k, l]) => (
               <button key={k} data-on={product === k} onClick={() => setProduct(k)}>{l}</button>
@@ -516,7 +634,7 @@ function Console() {
           ))}
         </aside>
 
-        <main className="file">
+        <section className="file" aria-label="Claim detail">
           {!claim && <div className="loading"><p>Pick a claim.</p></div>}
 
           {claim && claim.error && (
@@ -564,7 +682,12 @@ function Console() {
                 ))}
               </div>
 
-              <div className="record" style={{ opacity: done ? 1 : 0.3 }}>
+              <div
+                className="record"
+                style={{ opacity: done ? 1 : 0.3 }}
+                aria-live="polite"
+                aria-atomic="true"
+              >
                 <div className="rhead" style={{ background: o.bg }}>
                   <div className="rtop">
                     <div>
@@ -587,6 +710,10 @@ function Console() {
                 </div>
               </div>
 
+              {claim.kind !== 'health' && claim.decision.outcome !== 'accept' && (
+                <Counterfactual payload={claim.payload} asAt={AS_AT} />
+              )}
+
               <p className="note">
                 Every line above came back from <code>engine.decide()</code> over HTTP, a pure
                 function with no model call. This console computed none of it. There is no
@@ -597,7 +724,7 @@ function Console() {
               </p>
             </>
           )}
-        </main>
+        </section>
       </div>
     </section>
   );
@@ -615,6 +742,7 @@ export default function App() {
   return (
     <div className="app">
       <style>{CSS}</style>
+      <a className="skip" href="#main">Skip to content</a>
       <header className="shell">
         <button className="brand" onClick={() => setView('landing')}>
           <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
@@ -629,11 +757,14 @@ export default function App() {
         </nav>
       </header>
 
+      <main id="main">
       {view === 'home' && <Hero onStart={() => setView('lodge')} />}
       {view === 'lodge' && <Lodge onSubmit={() => setView('processing')} />}
       {view === 'processing' && <Processing onDone={() => setView('outcome')} />}
       {view === 'outcome' && <Outcome onConsole={() => setView('console')} />}
       {view === 'console' && <Console />}
+
+      </main>
 
       <footer className="foot">
         <span>Verdict · autonomous claims processing for Australian general insurance</span>
@@ -646,8 +777,11 @@ export default function App() {
 /* --------------------------------------------------------------------- css */
 
 const CSS = `
-@import url('https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@400;500;600;700&family=Public+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 *{box-sizing:border-box}
+.skip{position:absolute;left:-9999px;top:0;z-index:100;background:${T.ink};color:#fff;
+  padding:12px 18px;border-radius:0 0 8px 0;font-weight:600}
+.skip:focus{left:0}
 .app{background:${T.paper};color:${T.ink};font-family:${BODY};font-size:15px;line-height:1.6;min-height:100vh}
 .app h1,.app h2,.app h3{font-family:${DISPLAY};font-weight:600;letter-spacing:-.025em;margin:0;line-height:1.1}
 .app p{margin:0}
@@ -768,6 +902,32 @@ textarea:focus,input:focus{border-color:${T.plum};outline:none}
 .rtop b{display:block;font-family:${DISPLAY};font-size:20px;font-weight:600;letter-spacing:-.02em;margin-top:4px}
 .rhead p{margin-top:13px;font-size:14px;color:${T.body}}
 .acts{display:flex;flex-wrap:wrap;gap:8px;padding:16px 24px;border-top:1px solid ${T.rule}}
+.cf{margin:14px 30px 0;border:1px solid ${T.rule};border-radius:14px;padding:20px 24px;background:${T.card}}
+.cf-idle{display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:space-between}
+.cf-idle b{display:block;font-size:15px;color:${T.ink}}
+.cf-idle p{margin-top:4px;font-size:13.5px;color:${T.mute}}
+.cf-head{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}
+.cf-settled{font-size:11.5px;font-weight:600;letter-spacing:.04em;padding:3px 10px;border-radius:20px;
+  background:${T.sand};color:${T.slate}}
+.cf-sum{margin-top:10px;font-size:15px;color:${T.ink};font-weight:600}
+.cf-list{list-style:none;margin:16px 0 0;padding:0;display:flex;flex-direction:column;gap:10px}
+.cf-item{display:flex;gap:14px;padding:14px 16px;border:1px solid ${T.ruleSoft};border-radius:10px;
+  background:${T.paper}}
+.cf-item[data-immovable=true]{opacity:.72;background:${T.card};border-style:dashed}
+.cf-bar{width:3px;border-radius:2px;flex-shrink:0}
+.cf-body{flex:1;min-width:0}
+.cf-top{display:flex;flex-wrap:wrap;gap:10px;align-items:baseline;justify-content:space-between}
+.cf-top b{font-size:14.5px;color:${T.ink}}
+.cf-money{font-size:15px;font-weight:600;color:${T.ok}}
+.cf-body p{margin-top:5px;font-size:13.5px;color:${T.body};line-height:1.55}
+.cf-tags{display:flex;flex-wrap:wrap;gap:8px;margin-top:9px;font-size:11.5px;font-weight:600}
+.cf-tag{padding:2px 9px;border-radius:20px;background:${T.sand};color:${T.slate};font-weight:500}
+.cf-yes{background:${T.okSoft};color:${T.ok};font-weight:600}
+.cf-gate{font-family:${MONO};font-size:10.5px;letter-spacing:.02em}
+.cf-note{margin-top:16px;padding-top:14px;border-top:1px solid ${T.ruleSoft};
+  font-size:12px;color:${T.mute};line-height:1.6}
+.cf-note code{font-family:${MONO};font-size:11.5px}
+
 .note{margin:24px 30px 0;padding-top:22px;border-top:1px solid ${T.ruleSoft};font-size:12.5px;color:${T.mute};line-height:1.75;max-width:74ch}
 .note code{font-family:${MONO};font-size:12px;color:${T.petrol}}
 

@@ -59,6 +59,16 @@ export const extractIntake = (narrative, referenceDate) =>
   post('/intake/extract', { narrative, reference_date: referenceDate ?? null });
 export const decideHealth = (claim, asAt) => post('/claims/health/decide', claim, asAt);
 
+/**
+ * What single change would alter this outcome.
+ *
+ * Each lever is the engine re-run with one fact flipped, so the money is
+ * arithmetic. Facts a claimant could only change by misrepresenting the loss
+ * come back as `immovable` with a null outcome and are never actionable.
+ */
+export const counterfactual = (claim, asAt) =>
+  post('/claims/motor/counterfactual', claim, asAt);
+
 export async function serviceUp() {
   try {
     const res = await fetch(`${BASE}/health`);
