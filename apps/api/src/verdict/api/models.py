@@ -220,3 +220,40 @@ class IntakeOut(BaseModel):
     quotes: dict[str, str]
     unresolved: list[str]
     ready_to_decide: bool
+
+
+class LeverOut(BaseModel):
+    """One change, and what re-running the engine with it actually produced."""
+
+    kind: Literal["claimant", "insurer", "practitioner", "immovable"]
+    action: str
+    because: str
+    outcome: str | None = Field(
+        None,
+        description="Null for immovable facts, which are never presented as achievable.",
+    )
+    payable_delta: float | None
+    gate_cleared: str | None
+    gaps_closed: int
+    decisive: bool
+    progresses: bool
+
+
+class CounterfactualOut(BaseModel):
+    """What would have to be different for this claim to come out another way.
+
+    Only computable because the engine is a pure function: each lever is a real
+    re-run with one fact changed, not a prediction about the reasoning.
+
+    Facts a claimant could only change by misrepresenting the loss are never
+    offered as levers. Where such a fact is decisive it appears as `immovable`
+    with a null outcome.
+    """
+
+    current: str
+    summary: str
+    is_settled: bool = Field(
+        ...,
+        description="True when no legitimate change would alter the outcome. Stop chasing.",
+    )
+    levers: list[LeverOut]

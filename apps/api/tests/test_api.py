@@ -284,3 +284,49 @@ def test_intake_response_schema_carries_no_outcome():
     schema = client.get("/openapi.json").json()["components"]["schemas"]["IntakeOut"]
     forbidden = {"outcome", "covered", "payable", "confidence", "decision", "verdict"}
     assert not (set(schema["properties"]) & forbidden)
+
+
+# --- counterfactuals ---
+
+
+def test_counterfactual_names_the_missing_document():
+    body = merge(MOTOR, evidence_present=["claim_form", "damage_photos", "repair_quote"])
+    d = post("/claims/motor/counterfactual", body).json()
+    assert d["current"] == "request_evidence"
+    assert d["is_settled"] is False
+    assert any("licence" in x["action"] for x in d["levers"])
+
+
+def test_counterfactual_reports_the_real_money():
+    body = merge(MOTOR, evidence_present=["claim_form", "damage_photos", "repair_quote"])
+    lever = post("/claims/motor/counterfactual", body).json()["levers"][0]
+    assert lever["payable_delta"] == 1780.0
+    assert lever["decisive"] is True
+
+
+def test_counterfactual_marks_an_exclusion_as_settled():
+    body = merge(
+        MOTOR,
+        clauses=[
+            {"clause_id": "7.2", "heading": "Collision damage", "kind": "insuring"},
+            {"clause_id": "9.4", "heading": "Driver not licensed", "kind": "exclusion"},
+        ],
+    )
+    d = post("/claims/motor/counterfactual", body).json()
+    assert d["is_settled"] is True
+    immovable = [x for x in d["levers"] if x["kind"] == "immovable"]
+    assert immovable
+    assert immovable[0]["outcome"] is None
+
+
+def test_counterfactual_on_an_accepted_claim_has_no_levers():
+    d = post("/claims/motor/counterfactual", MOTOR).json()
+    assert d["levers"] == []
+    assert "Already payable" in d["summary"]
+
+
+def test_explain_gate_over_the_wire():
+    body = merge(MOTOR, evidence_present=["claim_form"])
+    r = client.post(f"/claims/motor/explain/4?as_at={AS_AT}", json=body)
+    assert r.status_code == 200
+    assert "decides this claim" in r.json()["explanation"]

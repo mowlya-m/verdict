@@ -16,8 +16,8 @@ test: ## Run the full suite
 	cd $(API) && $(PYTHON) -m pytest
 	cd $(WEB) && npm run test --if-present
 
-lint: ## Lint and type-check everything
-	cd $(API) && $(PYTHON) -m ruff check . && $(PYTHON) -m mypy src
+lint: ## Lint and type-check everything, exactly as CI does
+	cd $(API) && $(PYTHON) -m ruff check . && $(PYTHON) -m ruff format --check . && $(PYTHON) -m mypy src
 	cd $(WEB) && npm run lint
 
 fmt: ## Format
