@@ -1,5 +1,7 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import Landing from './Landing.jsx';
+import { ALL_CLAIMS, AS_AT } from './claims.js';
+import { decideMotor, decideHealth, counterfactual, extractIntake, serviceUp } from './api.js';
 
 /* ============================================================================
    VERDICT — full product surface
@@ -18,26 +20,28 @@ import Landing from './Landing.jsx';
    ========================================================================== */
 
 const T = {
-  ink: '#0F2A33',
-  petrol: '#1B4A5A',
-  plum: '#7A2E5A',
-  plumSoft: '#F7EDF2',
-  paper: '#FAF8F5',
-  sand: '#EFE9E0',
-  rule: '#DDD6CB',
-  ruleSoft: '#EBE6DD',
+  ink: '#0E2438',        // 15.8:1
+  petrol: '#0B6E99',     // accent alias for request-evidence state
+  plum: '#0B6E99',       // one accent
+  plumSoft: '#EBF4F9',
+  paper: '#F4F7F9',
+  sand: '#EDF1F4',
+  rule: '#DDE4EA',
+  ruleSoft: '#E9EEF2',
   card: '#FFFFFF',
-  body: '#3D4750',
-  mute: '#7C858E',
-  ok: '#1B6B4A',
-  okSoft: '#E6F1EC',
-  warn: '#B0731C',
+  body: '#3D4E5C',       // 8.6:1
+  mute: '#5A6B78',       // 5.5:1 — was #7C858E at 3.5:1
+  ok: '#0E7C4A',         // 5.3:1
+  okSoft: '#E6F4EC',
+  warn: '#9A5B06',       // 5.4:1 — was #B0731C at 3.7:1
   warnSoft: '#FBF2E2',
-  bad: '#A02A2A',
-  badSoft: '#F8EAEA',
+  bad: '#B42318',        // 6.6:1
+  badSoft: '#FBEAE8',
+  accent: '#0B6E99',
 };
 
-const DISPLAY = "'Familjen Grotesk', 'Helvetica Neue', sans-serif";
+// Landing dropped the display face. One type system, one voice.
+const DISPLAY = "'Public Sans', -apple-system, BlinkMacSystemFont, sans-serif";
 const BODY = "'Public Sans', -apple-system, BlinkMacSystemFont, sans-serif";
 const MONO = "'JetBrains Mono', ui-monospace, SFMono-Regular, monospace";
 
@@ -54,81 +58,28 @@ const money = (n) =>
 
 /* ------------------------------------------------------------------ claims */
 
-const CLAIMS = [
-  {
-    id: 'A10293', insured: 'D. Okafor', peril: 'Collision', dateOfLoss: '2026-08-04',
-    notified: '2026-08-05', quote: 2530, excess: 750, outcome: 'accept',
-    clock: { band: 'ok', daysRemaining: 108, consumed: 0.1 },
-    gates: [
-      { n: 1, name: 'Policy in force at date of loss', passed: true, basis: 'Cover ran 1 Jan to 31 Dec 2026. Loss dated 4 Aug.', citation: 'MTR-88213 · PDS 2025.11' },
-      { n: 2, name: 'Peril falls within an insuring clause', passed: true, basis: 'Collision matched to Collision damage.', citation: 'Clause 7.2' },
-      { n: 3, name: 'No exclusion applies', passed: true, basis: 'No exclusion matched the circumstances.' },
-      { n: 4, name: 'Evidence sufficient to decide', passed: true, basis: 'All required evidence on file.' },
-      { n: 5, name: 'Integrity checks', passed: true, basis: 'No material discrepancies.' },
-      { n: 6, name: 'Quantum within auto-settle ceiling', passed: true, basis: '$2,530.00 against a $5,000 ceiling.' },
-      { n: 7, name: 'No vulnerability signals', passed: true, basis: 'None detected.' },
-    ],
-  },
-  {
-    id: 'A10294', insured: 'T. Nguyen', peril: 'Collision', dateOfLoss: '2026-08-01',
-    notified: '2026-08-02', quote: 4900, excess: 750, outcome: 'escalate',
-    clock: { band: 'ok', daysRemaining: 105, consumed: 0.13 },
-    gates: [
-      { n: 1, name: 'Policy in force at date of loss', passed: true, basis: 'Cover ran 1 Jan to 31 Dec 2026. Loss dated 1 Aug.', citation: 'MTR-90114 · PDS 2025.11' },
-      { n: 2, name: 'Peril falls within an insuring clause', passed: true, basis: 'Collision matched to Collision damage.', citation: 'Clause 7.2' },
-      { n: 3, name: 'No exclusion applies', passed: true, basis: 'No exclusion matched the circumstances.' },
-      { n: 4, name: 'Evidence sufficient to decide', passed: true, basis: 'All required evidence on file.' },
-      { n: 5, name: 'Integrity checks', passed: false, basis: 'Score 7. Photo p1 was captured on 12 Jul, before the stated loss date. Photo p2 is perceptually identical to p1. The quote sits 250% above the top of the estimated band, and includes a tailgate that does not appear in the damage findings.' },
-      { n: 6, name: 'Quantum within auto-settle ceiling', passed: true, basis: '$4,900.00 against a $5,000 ceiling.' },
-      { n: 7, name: 'No vulnerability signals', passed: true, basis: 'None detected.' },
-    ],
-    escalation: ['Integrity score has reached the investigation threshold. A person decides this one, not the engine.'],
-  },
-  {
-    id: 'A10295', insured: 'R. Patel', peril: 'Theft', dateOfLoss: '2026-08-10',
-    notified: '2026-08-11', quote: null, excess: 750, outcome: 'request_evidence',
-    clock: { band: 'ok', daysRemaining: 114, consumed: 0.05 },
-    missing: ['Police report', 'Proof of purchase', 'Driver licence'],
-    gates: [
-      { n: 1, name: 'Policy in force at date of loss', passed: true, basis: 'Cover ran 1 Jan to 31 Dec 2026. Loss dated 10 Aug.', citation: 'MTR-77420 · PDS 2025.11' },
-      { n: 2, name: 'Peril falls within an insuring clause', passed: true, basis: 'Theft matched to Theft of vehicle.', citation: 'Clause 8.1' },
-      { n: 3, name: 'No exclusion applies', passed: true, basis: 'No exclusion matched the circumstances.' },
-      { n: 4, name: 'Evidence sufficient to decide', passed: false, basis: 'Missing a police report, proof of purchase and driver licence.' },
-      { n: 5, name: 'Integrity checks', passed: true, basis: 'No material discrepancies.' },
-      { n: 6, name: 'Quantum within auto-settle ceiling', passed: false, basis: 'Loss not yet quantifiable from the evidence supplied.' },
-      { n: 7, name: 'No vulnerability signals', passed: true, basis: 'None detected.' },
-    ],
-  },
-  {
-    id: 'A10287', insured: 'S. Alvarez', peril: 'Collision', dateOfLoss: '2026-04-02',
-    notified: '2026-04-06', quote: 3180, excess: 750, outcome: 'escalate',
-    clock: { band: 'breached', daysRemaining: -13, consumed: 1.11 },
-    gates: [
-      { n: 1, name: 'Policy in force at date of loss', passed: true, basis: 'Cover ran 1 Jan to 31 Dec 2026. Loss dated 2 Apr.', citation: 'MTR-61208 · PDS 2025.11' },
-      { n: 2, name: 'Peril falls within an insuring clause', passed: true, basis: 'Collision matched to Collision damage.', citation: 'Clause 7.2' },
-      { n: 3, name: 'No exclusion applies', passed: true, basis: 'No exclusion matched the circumstances.' },
-      { n: 4, name: 'Evidence sufficient to decide', passed: true, basis: 'All required evidence on file.' },
-      { n: 5, name: 'Integrity checks', passed: true, basis: 'No material discrepancies.' },
-      { n: 6, name: 'Quantum within auto-settle ceiling', passed: true, basis: '$3,180.00 against a $5,000 ceiling.' },
-      { n: 7, name: 'No vulnerability signals', passed: false, basis: 'Financial hardship disclosed in the claimant’s own words.' },
-    ],
-    escalation: ['Hardship disclosed. Route to a specialist handler.', 'The Code decision window has already passed. Deal with this one first.'],
-  },
-  {
-    id: 'A10291', insured: 'K. Brennan', peril: 'Collision', dateOfLoss: '2026-05-19',
-    notified: '2026-05-20', quote: 1420, excess: 750, outcome: 'decline',
-    clock: { band: 'at_risk', daysRemaining: 22, consumed: 0.82 },
-    gates: [
-      { n: 1, name: 'Policy in force at date of loss', passed: true, basis: 'Cover ran 1 Jan to 31 Dec 2026. Loss dated 19 May.', citation: 'MTR-52907 · PDS 2025.11' },
-      { n: 2, name: 'Peril falls within an insuring clause', passed: true, basis: 'Collision matched to Collision damage.', citation: 'Clause 7.2' },
-      { n: 3, name: 'No exclusion applies', passed: false, basis: 'Excluded. The driver was not licensed to drive the vehicle.', citation: 'Clause 9.4' },
-      { n: 4, name: 'Evidence sufficient to decide', passed: true, basis: 'All required evidence on file.' },
-      { n: 5, name: 'Integrity checks', passed: true, basis: 'No material discrepancies.' },
-      { n: 6, name: 'Quantum within auto-settle ceiling', passed: true, basis: '$1,420.00 against a $5,000 ceiling.' },
-      { n: 7, name: 'No vulnerability signals', passed: true, basis: 'None detected.' },
-    ],
-  },
-];
+/**
+ * Ask the engine to decide one claim.
+ *
+ * The console renders what it is told. It computes no outcome, derives no
+ * payable amount and infers no clock band. Everything below the API boundary
+ * is the engine's word.
+ */
+async function decideOne(entry) {
+  const fn = entry.kind === 'health' ? decideHealth : decideMotor;
+  const decision = await fn(entry.body, AS_AT);
+  return { ...entry, decision };
+}
+
+/** Decide the whole book, keeping failures alongside successes. */
+async function decideAll(entries) {
+  const settled = await Promise.allSettled(entries.map(decideOne));
+  return settled.map((r, i) =>
+    r.status === 'fulfilled'
+      ? r.value
+      : { ...entries[i], decision: null, error: r.reason?.message ?? 'Decision failed' },
+  );
+}
 
 const AGENT_RUN = [
   { at: 0.4, agent: 'Intake', line: 'Read 4 documents and 5 photos' },
@@ -238,17 +189,44 @@ function Hero({ onStart }) {
 
 function Lodge({ onSubmit }) {
   const [step, setStep] = useState(0);
-  const [what, setWhat] = useState(
-    'I was stopped at the lights on Swan Street and the car behind went into my rear bumper. Nobody was hurt. We swapped details.'
-  );
-  const [when, setWhen] = useState('2026-08-04');
+  const [what, setWhat] = useState('');
+  const [when, setWhen] = useState('');
+  const [extracting, setExtracting] = useState(false);
+  const [extracted, setExtracted] = useState(null);
+  const [extractErr, setExtractErr] = useState(null);
   const steps = ['What happened', 'When and where', 'Evidence'];
+
+  const runExtract = useCallback(
+    async (text) => {
+      if (!text || text.trim().length < 20) return;
+      setExtracting(true);
+      setExtractErr(null);
+      try {
+        const result = await extractIntake(text.trim());
+        setExtracted(result);
+        if (result.date_of_loss && !when) setWhen(result.date_of_loss);
+      } catch (err) {
+        setExtractErr(
+          err.message || 'Could not read the description. Continue manually if needed.'
+        );
+      } finally {
+        setExtracting(false);
+      }
+    },
+    [when]
+  );
+
+  const SEV = { light: 'Light', moderate: 'Moderate', heavy: 'Heavy', undeterminable: 'Unknown' };
 
   return (
     <section className="lodge">
       <nav className="stepper" aria-label="Progress">
         {steps.map((s, i) => (
-          <div key={s} className="stepitem" data-state={i < step ? 'done' : i === step ? 'now' : 'todo'}>
+          <div
+            key={s}
+            className="stepitem"
+            data-state={i < step ? 'done' : i === step ? 'now' : 'todo'}
+          >
             <span>{i < step ? '✓' : i + 1}</span>
             {s}
           </div>
@@ -259,50 +237,138 @@ function Lodge({ onSubmit }) {
         {step === 0 && (
           <>
             <h2>Tell us what happened</h2>
-            <p className="sub">Write it the way you’d tell a friend. We pull out the details we need.</p>
-            <textarea value={what} onChange={(e) => setWhat(e.target.value)} rows={6} aria-label="What happened" />
-            <div className="extract">
-              <span className="tiny">Read from your description</span>
-              <ul>
-                <li><b>Collision</b> · rear impact</li>
-                <li><b>Swan Street</b> · Melbourne</li>
-                <li><b>No injuries</b> reported</li>
-                <li><b>Other driver</b> details exchanged</li>
-              </ul>
-            </div>
+            <p className="sub">
+              Write it the way you would tell a friend. We read what you type and pull out the
+              details.
+            </p>
+            <textarea
+              value={what}
+              onChange={(e) => setWhat(e.target.value)}
+              onBlur={(e) => runExtract(e.target.value)}
+              rows={6}
+              aria-label="What happened"
+              placeholder="e.g. I was stopped at the lights on Swan Street and the car behind went into my rear bumper. Nobody was hurt."
+            />
+            {extracting && (
+              <div className="extract extract-loading">
+                <span className="tiny">Reading your description…</span>
+              </div>
+            )}
+            {extractErr && !extracting && (
+              <div className="extract extract-err" role="alert">
+                <span className="tiny">Could not extract automatically</span>
+                <p>{extractErr}</p>
+              </div>
+            )}
+            {extracted && !extracting && (
+              <div className="extract" aria-live="polite">
+                <span className="tiny">Read from your description</span>
+                <ul>
+                  {extracted.peril && extracted.peril !== 'other' && (
+                    <li>
+                      <b>{extracted.peril.replace(/_/g, ' ')}</b>
+                    </li>
+                  )}
+                  {extracted.location && <li><b>{extracted.location}</b></li>}
+                  {extracted.time_of_day && <li>{extracted.time_of_day}</li>}
+                  {extracted.injuries_reported === false && <li>No injuries reported</li>}
+                  {extracted.injuries_reported === true && (
+                    <li style={{ color: T.bad, fontWeight: 600 }}>Injuries reported</li>
+                  )}
+                  {extracted.third_party_details_exchanged === true && (
+                    <li>Other driver details exchanged</li>
+                  )}
+                  {extracted.damage?.map((d, i) => (
+                    <li key={i}>
+                      <b>{d.part}</b> · {SEV[d.severity] || d.severity}
+                    </li>
+                  ))}
+                  {extracted.vulnerability_signals?.map((s, i) => (
+                    <li key={i} style={{ color: T.warn }}>
+                      {s}
+                    </li>
+                  ))}
+                </ul>
+                {extracted.missing?.length > 0 && (
+                  <p className="ext-missing">
+                    We will also need: {extracted.missing.join(', ').toLowerCase()}
+                  </p>
+                )}
+              </div>
+            )}
+            {!extracted && !extracting && !extractErr && what.trim().length < 20 && (
+              <div className="extract extract-hint">
+                <span className="tiny">Tip</span>
+                <p>
+                  The more you write, the less we need to ask. Include the date, location and what
+                  was damaged.
+                </p>
+              </div>
+            )}
           </>
         )}
         {step === 1 && (
           <>
             <h2>When and where</h2>
-            <p className="sub">We check your cover against the wording that applied on this date, not today’s.</p>
+            <p className="sub">
+              We check your cover against the wording that applied on this date, not today.
+            </p>
             <label className="field">
               <span>Date of the accident</span>
               <input type="date" value={when} onChange={(e) => setWhen(e.target.value)} />
             </label>
             <label className="field">
               <span>Suburb</span>
-              <input type="text" defaultValue="Richmond VIC 3121" />
+              <input
+                type="text"
+                defaultValue={extracted?.location || ''}
+                placeholder="e.g. Richmond VIC 3121"
+              />
             </label>
-            <div className="extract">
-              <span className="tiny">Cover check</span>
-              <ul>
-                <li>Policy <b>MTR-88213</b> was active on {when}</li>
-                <li>Wording <b>PDS 2025.11</b> applies</li>
-              </ul>
-            </div>
+            {extracted?.unresolved?.length > 0 && (
+              <div className="extract extract-err" role="note">
+                <span className="tiny">We could not work out</span>
+                <ul>
+                  {extracted.unresolved.map((u, i) => (
+                    <li key={i}>{u}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </>
         )}
         {step === 2 && (
           <>
             <h2>Show us the damage</h2>
             <p className="sub">Photos from your phone are fine. Add a repair quote if you have one.</p>
+            {extracted?.missing?.length > 0 && (
+              <div className="extract" style={{ marginBottom: 16 }}>
+                <span className="tiny">We will need these to decide</span>
+                <ul>
+                  {extracted.missing.map((m) => (
+                    <li key={m}>
+                      <b>{m.replace(/_/g, ' ')}</b>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             <div className="drops">
               {[
-                ['Damage photos', '5 added', true],
-                ['Driver licence', 'Added', true],
-                ['Repair quote', 'Added', true],
-                ['Police report', 'Not needed for this claim', false],
+                [
+                  'Damage photos',
+                  extracted?.damage?.length > 0
+                    ? `${extracted.damage.length} type${extracted.damage.length > 1 ? 's' : ''} identified`
+                    : 'Add photos',
+                  extracted?.damage?.length > 0,
+                ],
+                ['Driver licence', 'Add your licence', false],
+                ['Repair quote', 'Add if you have one', false],
+                [
+                  'Police report',
+                  extracted?.police_involved ? 'Required' : 'Not needed for most claims',
+                  extracted?.police_involved === false,
+                ],
               ].map(([h, s, on]) => (
                 <div key={h} className="drop" data-on={on}>
                   <b>{h}</b>
@@ -313,8 +379,16 @@ function Lodge({ onSubmit }) {
           </>
         )}
         <div className="navrow">
-          {step > 0 && <button className="btn ghost" onClick={() => setStep(step - 1)}>Back</button>}
-          <button className="btn primary" onClick={() => (step === 2 ? onSubmit() : setStep(step + 1))}>
+          {step > 0 && (
+            <button className="btn ghost" onClick={() => setStep(step - 1)}>
+              Back
+            </button>
+          )}
+          <button
+            className="btn primary"
+            disabled={extracting}
+            onClick={() => (step === 2 ? onSubmit() : setStep(step + 1))}
+          >
             {step === 2 ? 'Lodge the claim' : 'Continue'}
           </button>
         </div>
@@ -322,6 +396,7 @@ function Lodge({ onSubmit }) {
     </section>
   );
 }
+
 
 function Processing({ onDone }) {
   const [t, setT] = useState(0);
@@ -359,28 +434,74 @@ function Processing({ onDone }) {
   );
 }
 
-function Outcome({ onConsole }) {
-  const c = CLAIMS[0];
+function Outcome({ decision, error, onConsole, onRetry }) {
+  if (error) {
+    return (
+      <section className="outcome">
+        <div className="ocard">
+          <Pill outcome="escalate">Not decided</Pill>
+          <h2>We could not decide this yet.</h2>
+          <p className="sub">{error}</p>
+          <div className="cta">
+            <button className="btn primary" onClick={onRetry}>Try again</button>
+            <button className="btn ghost" onClick={onConsole}>Open the console</button>
+          </div>
+        </div>
+      </section>
+    );
+  }
+  if (!decision) return null;
+
+  const clauses = decision.clauses_relied_on.join(', ');
+
   return (
     <section className="outcome">
       <div className="ocard">
-        <Pill outcome="accept">Approved</Pill>
-        <h2>Your claim is approved.</h2>
-        <p className="sub">Decided in 7 seconds. The Code allowed us 120 days.</p>
-        <dl className="sums">
-          <div><dt>Repair cost</dt><dd className="mono">{money(c.quote)}</dd></div>
-          <div><dt>Your excess</dt><dd className="mono">−{money(c.excess)}</dd></div>
-          <div className="tot"><dt>We pay</dt><dd className="mono">{money(c.quote - c.excess)}</dd></div>
-        </dl>
+        <Pill outcome={decision.outcome} />
+        <h2>
+          {decision.outcome === 'accept' && 'Your claim is approved.'}
+          {decision.outcome === 'partial' && 'Your claim is partly covered.'}
+          {decision.outcome === 'decline' && 'We cannot pay this claim.'}
+          {decision.outcome === 'request_evidence' && 'We need a little more from you.'}
+          {decision.outcome === 'escalate' && 'A person is looking at this.'}
+        </h2>
+        <p className="sub">
+          Decided in seconds. The Code allowed {decision.clock.days_remaining >= 0
+            ? `${decision.clock.days_remaining} more days`
+            : 'four months'}.
+        </p>
+
+        {decision.payable !== null && (
+          <dl className="sums">
+            <div>
+              <dt>Benefit assessed</dt>
+              <dd className="mono">{money(decision.payable + (decision.excess_applied ?? 0))}</dd>
+            </div>
+            <div>
+              <dt>Your excess</dt>
+              <dd className="mono">−{money(decision.excess_applied ?? 0)}</dd>
+            </div>
+            <div className="tot">
+              <dt>We pay</dt>
+              <dd className="mono">{money(decision.payable)}</dd>
+            </div>
+          </dl>
+        )}
+
         <div className="why">
           <span className="tiny">Why</span>
-          <p>
-            Your collision is covered under <b>clause 7.2</b> of PDS 2025.11, the wording that
-            applied on 4 August 2026. All seven checks passed.
-          </p>
+          <p>{decision.summary}</p>
+          {clauses && (
+            <p style={{ marginTop: 8, fontSize: 12.5, color: T.mute }}>
+              Relied on {clauses}.
+            </p>
+          )}
         </div>
+
         <div className="cta">
-          <button className="btn primary">Book the repair</button>
+          <button className="btn primary">
+            {decision.outcome === 'accept' ? 'Book the repair' : 'Contact us'}
+          </button>
           <button className="btn ghost" onClick={onConsole}>See how it was decided</button>
         </div>
       </div>
@@ -390,33 +511,204 @@ function Outcome({ onConsole }) {
 
 /* ----------------------------------------------------------- assessor view */
 
+
+/* ------------------------------------------------------- counterfactual panel
+
+   Sits under the reasons record because it answers the question a person has
+   the moment they read one: is there a way forward, or is this finished.
+
+   Levers arrive already ordered and already classified. This renders them; it
+   decides nothing. An immovable fact carries no outcome and no money, so there
+   is deliberately no path here that could make one look actionable.
+   ---------------------------------------------------------------------------- */
+
+const LEVER_KIND = {
+  claimant: { label: 'The claimant can do this', c: T.accent },
+  insurer: { label: 'We do this', c: T.petrol },
+  practitioner: { label: 'A practitioner must do this', c: T.warn },
+  immovable: { label: 'Cannot change', c: T.mute },
+};
+
+function Counterfactual({ payload, asAt }) {
+  const [state, setState] = useState({ status: 'idle' });
+
+  const load = useCallback(async () => {
+    setState({ status: 'loading' });
+    try {
+      setState({ status: 'ready', data: await counterfactual(payload, asAt) });
+    } catch (err) {
+      setState({ status: 'error', message: err.message });
+    }
+  }, [payload, asAt]);
+
+  if (state.status === 'idle') {
+    return (
+      <div className="cf cf-idle">
+        <div>
+          <b>What would change this?</b>
+          <p>Re-runs the decision with one fact altered at a time.</p>
+        </div>
+        <button className="btn ghost sm" onClick={load}>Work it out</button>
+      </div>
+    );
+  }
+
+  if (state.status === 'loading') {
+    return <div className="cf cf-idle"><p>Re-running the decision…</p></div>;
+  }
+
+  if (state.status === 'error') {
+    return (
+      <div className="cf cf-idle">
+        <p style={{ color: T.bad }}>{state.message}</p>
+        <button className="btn ghost sm" onClick={load}>Try again</button>
+      </div>
+    );
+  }
+
+  const { data } = state;
+
+  if (!data.levers.length) {
+    return (
+      <div className="cf cf-idle">
+        <p style={{ color: T.ok }}>{data.summary}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="cf">
+      <div className="cf-head">
+        <span className="tiny">What would change this</span>
+        {data.is_settled && <span className="cf-settled">Nothing further to chase</span>}
+      </div>
+      <p className="cf-sum">{data.summary}</p>
+
+      <ul className="cf-list">
+        {data.levers.map((x, i) => {
+          const kind = LEVER_KIND[x.kind] ?? LEVER_KIND.immovable;
+          return (
+            <li key={i} className="cf-item" data-immovable={x.kind === 'immovable'}>
+              <span className="cf-bar" style={{ background: kind.c }} />
+              <div className="cf-body">
+                <div className="cf-top">
+                  <b>{x.action}</b>
+                  {/* Money only ever appears where a real re-run produced it. */}
+                  {x.payable_delta > 0 && (
+                    <span className="cf-money mono">
+                      +${x.payable_delta.toLocaleString('en-AU')}
+                    </span>
+                  )}
+                </div>
+                <p>{x.because}</p>
+                <div className="cf-tags">
+                  <span style={{ color: kind.c }}>{kind.label}</span>
+                  {x.decisive && <span className="cf-tag cf-yes">Settles the claim</span>}
+                  {x.progresses && <span className="cf-tag">Closes {x.gaps_closed} gap{x.gaps_closed === 1 ? '' : 's'}</span>}
+                  {x.gate_cleared && <span className="cf-tag cf-gate">{x.gate_cleared}</span>}
+                </div>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+
+      <p className="cf-note">
+        Every figure above is <code>engine.decide()</code> re-run with one fact changed, not
+        an estimate. Facts that could only change by misrepresenting the loss are never
+        offered as options.
+      </p>
+    </div>
+  );
+}
+
 function Console() {
-  const [sel, setSel] = useState('A10294');
+  const [book, setBook] = useState(null);          // null = still loading
+  const [sel, setSel] = useState(null);
+  const [product, setProduct] = useState('all');
   const [shown, setShown] = useState(0);
+  const [offline, setOffline] = useState(false);
   const timers = useRef([]);
-  const claim = CLAIMS.find((c) => c.id === sel);
+
+  // Decide the whole book once, on mount. Every gate on screen comes back
+  // from the engine; nothing here works out an outcome for itself.
+  useEffect(() => {
+    let live = true;
+    (async () => {
+      const up = await serviceUp();
+      if (!live) return;
+      setOffline(!up);
+      const decided = await decideAll(ALL_CLAIMS);
+      if (!live) return;
+      setBook(decided);
+      const firstInteresting =
+        decided.find((c) => c.decision && c.decision.outcome !== 'accept') ?? decided[0];
+      setSel(firstInteresting?.body.claim_id ?? null);
+    })();
+    return () => { live = false; };
+  }, []);
+
+  const visible = useMemo(
+    () => (book ?? []).filter((c) => product === 'all' || c.kind === product),
+    [book, product],
+  );
+  const claim = (book ?? []).find((c) => c.body.claim_id === sel) ?? null;
+  // The ?? [] fallback allocates a fresh array on every render, which would
+  // restart the trace animation continuously. Memoise so the effect only fires
+  // when the decision actually changes.
+  const gates = useMemo(() => claim?.decision?.gates ?? [], [claim?.decision]);
 
   useEffect(() => {
     timers.current.forEach(clearTimeout);
+    if (!gates.length) return;
     if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
-      setShown(7);
+      setShown(gates.length);
       return;
     }
     setShown(0);
-    timers.current = claim.gates.map((_, i) => setTimeout(() => setShown(i + 1), 80 * (i + 1)));
+    timers.current = gates.map((_, i) => setTimeout(() => setShown(i + 1), 80 * (i + 1)));
     return () => timers.current.forEach(clearTimeout);
-  }, [sel, claim.gates]);
+  }, [sel, gates]);
 
-  const stats = useMemo(
-    () => ({
-      auto: Math.round((CLAIMS.filter((c) => c.outcome === 'accept').length / CLAIMS.length) * 100),
-      breached: CLAIMS.filter((c) => c.clock.band === 'breached').length,
-    }),
-    []
-  );
+  const stats = useMemo(() => {
+    const decided = (book ?? []).filter((c) => c.decision);
+    if (!decided.length) return { auto: 0, breached: 0, n: 0 };
+    return {
+      n: decided.length,
+      auto: Math.round(
+        (decided.filter((c) => c.decision.outcome === 'accept').length / decided.length) * 100,
+      ),
+      breached: decided.filter((c) => c.decision.clock.band === 'breached').length,
+    };
+  }, [book]);
 
-  const o = OUTCOME[claim.outcome];
-  const done = shown >= claim.gates.length;
+  if (!book) {
+    return (
+      <section className="console">
+        <div className="loading">
+          <span className="spinner" aria-hidden="true" />
+          <p>Asking the engine to decide {ALL_CLAIMS.length} claims…</p>
+        </div>
+      </section>
+    );
+  }
+
+  if (offline) {
+    return (
+      <section className="console">
+        <div className="loading">
+          <h2 style={{ fontSize: 22 }}>The decision service is not running.</h2>
+          <p style={{ marginTop: 10, maxWidth: '46ch' }}>
+            Every outcome on this screen comes from the engine over HTTP, so there is
+            nothing to show without it. Start it with <code>make api</code>, then reload.
+          </p>
+        </div>
+      </section>
+    );
+  }
+
+  const o = claim?.decision ? OUTCOME[claim.decision.outcome] : null;
+  const done = shown >= gates.length && gates.length > 0;
 
   return (
     <section className="console">
@@ -435,96 +727,123 @@ function Console() {
       </div>
 
       <div className="split">
-        <aside className="queue">
-          {CLAIMS.map((c) => (
-            <button key={c.id} className="qrow" aria-current={sel === c.id} onClick={() => setSel(c.id)}>
+        <aside className="queue" aria-label="Claim queue">
+          <div className="qfilter">
+            {[['all', 'All'], ['motor', 'Motor'], ['health', 'Health']].map(([k, l]) => (
+              <button key={k} data-on={product === k} onClick={() => setProduct(k)}>{l}</button>
+            ))}
+          </div>
+          {visible.map((c) => (
+            <button
+              key={c.body.claim_id}
+              className="qrow"
+              aria-current={sel === c.body.claim_id}
+              onClick={() => setSel(c.body.claim_id)}
+            >
               <div className="qt">
-                <span className="mono tiny">{c.id}</span>
-                <Pill outcome={c.outcome} />
+                <span className="mono tiny">{c.body.claim_id}</span>
+                {c.decision ? <Pill outcome={c.decision.outcome} /> : <span className="tiny">error</span>}
               </div>
               <b>{c.insured}</b>
               <div className="qm">
-                <span>{c.peril} · {c.dateOfLoss}</span>
-                <span className="mono">{c.quote ? money(c.quote) : '—'}</span>
+                <span>{c.label}</span>
               </div>
-              <Rail clock={c.clock} />
+              {c.decision && <Rail clock={c.decision.clock} />}
             </button>
           ))}
         </aside>
 
-        <main className="file">
-          <header className="fhead">
-            <div>
-              <span className="mono tiny">{claim.id}</span>
-              <h2>{claim.insured}</h2>
-              <p className="sub">{claim.peril} · loss {claim.dateOfLoss} · notified {claim.notified}</p>
-            </div>
-            <Ring clock={claim.clock} />
-          </header>
+        <section className="file" aria-label="Claim detail">
+          {!claim && <div className="loading"><p>Pick a claim.</p></div>}
 
-          <div className="trace">
-            <div className="th">
-              <span className="tiny">Validation trace</span>
-              <span className="mono tiny">{shown}/7</span>
+          {claim && claim.error && (
+            <div className="loading">
+              <h2 style={{ fontSize: 20 }}>{claim.body.claim_id} could not be decided</h2>
+              <p style={{ marginTop: 8 }}>{claim.error}</p>
             </div>
-            {claim.gates.map((g, i) => (
+          )}
+
+          {claim && claim.decision && (
+            <>
+              <header className="fhead">
+                <div>
+                  <span className="mono tiny">{claim.body.claim_id} · {claim.kind}</span>
+                  <h2>{claim.insured}</h2>
+                  <p className="sub">{claim.label}</p>
+                </div>
+                <Ring clock={claim.decision.clock} />
+              </header>
+
+              <div className="trace">
+                <div className="th">
+                  <span className="tiny">Validation trace</span>
+                  <span className="mono tiny">{shown}/{gates.length}</span>
+                </div>
+                {gates.map((g, i) => (
+                  <div
+                    key={g.n}
+                    className="gate"
+                    style={{ opacity: i < shown ? 1 : 0, transform: i < shown ? 'none' : 'translateY(4px)' }}
+                  >
+                    <span className="mono gn">{String(g.n).padStart(2, '0')}</span>
+                    <div>
+                      <b>{g.name}</b>
+                      <p>{g.basis}</p>
+                      {g.citation && <span className="mono cite">{g.citation}</span>}
+                    </div>
+                    <span
+                      className="mark"
+                      style={{ background: g.passed ? T.okSoft : T.badSoft, color: g.passed ? T.ok : T.bad }}
+                    >
+                      {g.passed ? 'PASS' : 'FAIL'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
               <div
-                key={g.n}
-                className="gate"
-                style={{ opacity: i < shown ? 1 : 0, transform: i < shown ? 'none' : 'translateY(4px)' }}
+                className="record"
+                style={{ opacity: done ? 1 : 0.3 }}
+                aria-live="polite"
+                aria-atomic="true"
               >
-                <span className="mono gn">{String(g.n).padStart(2, '0')}</span>
-                <div>
-                  <b>{g.name}</b>
-                  <p>{g.basis}</p>
-                  {g.citation && <span className="mono cite">{g.citation}</span>}
+                <div className="rhead" style={{ background: o.bg }}>
+                  <div className="rtop">
+                    <div>
+                      <span className="tiny">Reasons record</span>
+                      <b style={{ color: o.fg }}>{o.verb}</b>
+                    </div>
+                    <Pill outcome={claim.decision.outcome} />
+                  </div>
+                  <p>{claim.decision.summary}</p>
+                  {claim.decision.clauses_relied_on.length > 0 && (
+                    <span className="mono cite">
+                      relied on {claim.decision.clauses_relied_on.join(', ')}
+                    </span>
+                  )}
                 </div>
-                <span
-                  className="mark"
-                  style={{ background: g.passed ? T.okSoft : T.badSoft, color: g.passed ? T.ok : T.bad }}
-                >
-                  {g.passed ? 'PASS' : 'FAIL'}
+                <div className="acts">
+                  <button className="btn primary sm">Authorise</button>
+                  <button className="btn ghost sm">Edit and authorise</button>
+                  <button className="btn ghost sm">Draft the letter</button>
+                </div>
+              </div>
+
+              {claim.kind !== 'health' && claim.decision.outcome !== 'accept' && (
+                <Counterfactual payload={claim.payload} asAt={AS_AT} />
+              )}
+
+              <p className="note">
+                Every line above came back from <code>engine.decide()</code> over HTTP, a pure
+                function with no model call. This console computed none of it. There is no
+                confidence score on this page by design — the trace is the confidence.
+                <span className="mono" style={{ display: 'block', marginTop: 8 }}>
+                  engine {claim.decision.engine_version}
                 </span>
-              </div>
-            ))}
-          </div>
-
-          <div className="record" style={{ opacity: done ? 1 : 0.3 }}>
-            <div className="rhead" style={{ background: o.bg }}>
-              <div className="rtop">
-                <div>
-                  <span className="tiny">Reasons record</span>
-                  <b style={{ color: o.fg }}>{o.verb}</b>
-                </div>
-                <Pill outcome={claim.outcome} />
-              </div>
-              <p>
-                {claim.outcome === 'accept' &&
-                  `All seven gates cleared. We pay ${money(claim.quote - claim.excess)} after the ${money(claim.excess)} excess.`}
-                {claim.outcome === 'request_evidence' &&
-                  `Not decidable yet. Waiting on ${claim.missing.join(', ').toLowerCase()}.`}
-                {claim.outcome === 'decline' &&
-                  claim.gates.filter((g) => !g.passed).map((g) => g.basis).join(' ')}
-                {claim.outcome === 'escalate' && claim.escalation.join(' ')}
               </p>
-              <span className="mono cite">
-                relied on {claim.gates.filter((g) => g.citation).map((g) => g.citation.split(' · ').pop()).join(', ')}
-              </span>
-            </div>
-            <div className="acts">
-              <button className="btn primary sm">Authorise</button>
-              <button className="btn ghost sm">Edit and authorise</button>
-              <button className="btn ghost sm">Draft the letter</button>
-            </div>
-          </div>
-
-          <p className="note">
-            Every line above comes from <code>engine.decide()</code>, a pure function with no model call.
-            The agents that fed it returned clause identifiers, damaged parts and weighted discrepancies.
-            None of them returned a verdict. There is no confidence score on this page by design. The trace
-            is the confidence.
-          </p>
-        </main>
+            </>
+          )}
+        </section>
       </div>
     </section>
   );
@@ -541,7 +860,9 @@ export default function App() {
 
   return (
     <div className="app">
+      <a className="skip" href="#main">Skip to content</a>
       <style>{CSS}</style>
+      <a className="skip" href="#main">Skip to content</a>
       <header className="shell">
         <button className="brand" onClick={() => setView('landing')}>
           <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
@@ -556,11 +877,14 @@ export default function App() {
         </nav>
       </header>
 
+      <main id="main">
       {view === 'home' && <Hero onStart={() => setView('lodge')} />}
       {view === 'lodge' && <Lodge onSubmit={() => setView('processing')} />}
       {view === 'processing' && <Processing onDone={() => setView('outcome')} />}
       {view === 'outcome' && <Outcome onConsole={() => setView('console')} />}
       {view === 'console' && <Console />}
+
+      </main>
 
       <footer className="foot">
         <span>Verdict · autonomous claims processing for Australian general insurance</span>
@@ -573,8 +897,13 @@ export default function App() {
 /* --------------------------------------------------------------------- css */
 
 const CSS = `
-@import url('https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@400;500;600;700&family=Public+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 *{box-sizing:border-box}
+.skip{position:absolute;left:-9999px;top:0;z-index:100;background:${T.ink};color:#fff;
+  padding:12px 18px;border-radius:0 0 8px 0;font-weight:600}
+.skip:focus{left:0}
+.skip{position:absolute;left:-9999px;top:0;z-index:100;background:${T.ink};color:#fff;padding:12px 18px;border-radius:0 0 8px 0;font-weight:600}
+.skip:focus{left:0}
 .app{background:${T.paper};color:${T.ink};font-family:${BODY};font-size:15px;line-height:1.6;min-height:100vh}
 .app h1,.app h2,.app h3{font-family:${DISPLAY};font-weight:600;letter-spacing:-.025em;margin:0;line-height:1.1}
 .app p{margin:0}
@@ -695,6 +1024,32 @@ textarea:focus,input:focus{border-color:${T.plum};outline:none}
 .rtop b{display:block;font-family:${DISPLAY};font-size:20px;font-weight:600;letter-spacing:-.02em;margin-top:4px}
 .rhead p{margin-top:13px;font-size:14px;color:${T.body}}
 .acts{display:flex;flex-wrap:wrap;gap:8px;padding:16px 24px;border-top:1px solid ${T.rule}}
+.cf{margin:14px 30px 0;border:1px solid ${T.rule};border-radius:14px;padding:20px 24px;background:${T.card}}
+.cf-idle{display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:space-between}
+.cf-idle b{display:block;font-size:15px;color:${T.ink}}
+.cf-idle p{margin-top:4px;font-size:13.5px;color:${T.mute}}
+.cf-head{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}
+.cf-settled{font-size:11.5px;font-weight:600;letter-spacing:.04em;padding:3px 10px;border-radius:20px;
+  background:${T.sand};color:${T.slate}}
+.cf-sum{margin-top:10px;font-size:15px;color:${T.ink};font-weight:600}
+.cf-list{list-style:none;margin:16px 0 0;padding:0;display:flex;flex-direction:column;gap:10px}
+.cf-item{display:flex;gap:14px;padding:14px 16px;border:1px solid ${T.ruleSoft};border-radius:10px;
+  background:${T.paper}}
+.cf-item[data-immovable=true]{opacity:.72;background:${T.card};border-style:dashed}
+.cf-bar{width:3px;border-radius:2px;flex-shrink:0}
+.cf-body{flex:1;min-width:0}
+.cf-top{display:flex;flex-wrap:wrap;gap:10px;align-items:baseline;justify-content:space-between}
+.cf-top b{font-size:14.5px;color:${T.ink}}
+.cf-money{font-size:15px;font-weight:600;color:${T.ok}}
+.cf-body p{margin-top:5px;font-size:13.5px;color:${T.body};line-height:1.55}
+.cf-tags{display:flex;flex-wrap:wrap;gap:8px;margin-top:9px;font-size:11.5px;font-weight:600}
+.cf-tag{padding:2px 9px;border-radius:20px;background:${T.sand};color:${T.slate};font-weight:500}
+.cf-yes{background:${T.okSoft};color:${T.ok};font-weight:600}
+.cf-gate{font-family:${MONO};font-size:10.5px;letter-spacing:.02em}
+.cf-note{margin-top:16px;padding-top:14px;border-top:1px solid ${T.ruleSoft};
+  font-size:12px;color:${T.mute};line-height:1.6}
+.cf-note code{font-family:${MONO};font-size:11.5px}
+
 .note{margin:24px 30px 0;padding-top:22px;border-top:1px solid ${T.ruleSoft};font-size:12.5px;color:${T.mute};line-height:1.75;max-width:74ch}
 .note code{font-family:${MONO};font-size:12px;color:${T.petrol}}
 
