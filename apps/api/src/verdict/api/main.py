@@ -245,7 +245,7 @@ def motor_explain(gate: int, body: MotorClaimIn, as_at: date | None = None) -> d
     response_model=DamageOut,
     responses={422: {"model": ErrorOut}, 502: {"model": ErrorOut}},
     tags=["agents"],
-    summary="Vision Agent"
+    summary="Vision Agent",
 )
 def assess_damage(body: IntakeIn) -> DamageOut:
     """Analyze a claim image for damage."""
