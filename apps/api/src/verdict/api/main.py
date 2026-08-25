@@ -20,6 +20,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from verdict.agents.intake import IntakeError, extract
+from verdict.agents.vision_agent import assess_damage_from_image
 from verdict.counterfactual import explain_gate, explore
 from verdict.engine import decide
 from verdict.health_engine import decide_health
@@ -237,3 +238,23 @@ def motor_explain(gate: int, body: MotorClaimIn, as_at: date | None = None) -> d
     whether it is the thing deciding the claim.
     """
     return {"gate": str(gate), "explanation": explain_gate(to_claim(body), gate, today=as_at)}
+
+
+@app.post(
+    "/agents/vision/assess",
+    response_model=DamageOut,
+    responses={422: {"model": ErrorOut}, 502: {"model": ErrorOut}},
+    tags=["agents"],
+    summary="Vision Agent"
+)
+def assess_damage(body: IntakeIn) -> DamageOut:
+    """Analyze a claim image for damage."""
+    try:
+        result = assess_damage_from_image(image_base64=body.narrative)
+        return DamageOut(
+            part=", ".join(result.damaged_parts),
+            severity=result.severity_band,
+            quote=result.notes,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
