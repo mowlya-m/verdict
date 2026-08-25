@@ -13,10 +13,13 @@ import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 
 import anthropic
+from anthropic.types import ImageBlockParam
 
 MODEL = "claude-sonnet-4-6"
+_SEVERITY_BANDS = {"minor", "moderate", "severe", "undeterminable"}
 
 
 @dataclass
@@ -64,14 +67,17 @@ def assess_damage_from_image(
                 {
                     "role": "user",
                     "content": [
-                        {
-                            "type": "image",
-                            "source": {
-                                "type": "base64",
-                                "media_type": "image/jpeg",
-                                "data": image_data,
+                        cast(
+                            ImageBlockParam,
+                            {
+                                "type": "image",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": "image/jpeg",
+                                    "data": image_data,
+                                },
                             },
-                        },
+                        ),
                         {"type": "text", "text": _PROMPT},
                     ],
                 }
@@ -80,7 +86,10 @@ def assess_damage_from_image(
     except anthropic.APIError as exc:
         raise VisionError(f"Vision service unavailable: {exc}") from exc
 
-    response_text = message.content[0].text
+    block = message.content[0]
+    if block.type != "text":
+        raise VisionError(f"Vision service returned a {block.type} block, not text.")
+    response_text = block.text
     match = re.search(r"\{.*\}", response_text, re.DOTALL)
     if not match:
         raise VisionError("Vision response contained no JSON.")
@@ -92,7 +101,11 @@ def assess_damage_from_image(
 
     return DamageAssessment(
         damaged_parts=list(data.get("damaged_parts", [])),
-        severity_band=data.get("severity_band", "undeterminable"),
+        severity_band=(
+            data["severity_band"]
+            if data.get("severity_band") in _SEVERITY_BANDS
+            else "undeterminable"
+        ),
         visibility_quality=data.get("visibility_quality", "poor"),
         notes=data.get("notes", ""),
     )

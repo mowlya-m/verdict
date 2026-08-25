@@ -15,12 +15,14 @@ from __future__ import annotations
 import logging
 import os
 from datetime import date
+from typing import Literal
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
 
 from verdict.agents.intake import IntakeError, extract
-from verdict.agents.vision_agent import assess_damage_from_image
+from verdict.agents.vision_agent import VisionError, assess_damage_from_image
 from verdict.counterfactual import explain_gate, explore
 from verdict.engine import decide
 from verdict.health_engine import decide_health
@@ -240,21 +242,42 @@ def motor_explain(gate: int, body: MotorClaimIn, as_at: date | None = None) -> d
     return {"gate": str(gate), "explanation": explain_gate(to_claim(body), gate, today=as_at)}
 
 
+class VisionIn(BaseModel):
+    """A claim photo, base64-encoded.
+
+    Not to be confused with IntakeIn, which carries narrative text rather
+    than image data.
+    """
+
+    image_base64: str = Field(..., min_length=100)
+
+
+_TO_SEVERITY: dict[str, Literal["light", "moderate", "heavy", "undeterminable"]] = {
+    "minor": "light",
+    "moderate": "moderate",
+    "severe": "heavy",
+    "undeterminable": "undeterminable",
+}
+
+
 @app.post(
     "/agents/vision/assess",
     response_model=DamageOut,
     responses={422: {"model": ErrorOut}, 502: {"model": ErrorOut}},
     tags=["agents"],
-    summary="Vision Agent",
+    summary="Vision agent: read one claim photo",
 )
-def assess_damage(body: IntakeIn) -> DamageOut:
-    """Analyze a claim image for damage."""
+def assess_damage(body: VisionIn) -> DamageOut:
+    """Read a claim photo and report what is visible.
+
+    Evidence only, per ADR-0002 — this never decides coverage or quantum.
+    """
     try:
-        result = assess_damage_from_image(image_base64=body.narrative)
-        return DamageOut(
-            part=", ".join(result.damaged_parts),
-            severity=result.severity_band,
-            quote=result.notes,
-        )
-    except Exception as exc:
+        result = assess_damage_from_image(image_base64=body.image_base64)
+    except VisionError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return DamageOut(
+        part=", ".join(result.damaged_parts) or "unspecified",
+        severity=_TO_SEVERITY.get(result.severity_band, "undeterminable"),
+        quote=result.notes,
+    )
