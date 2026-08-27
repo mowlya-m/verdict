@@ -167,6 +167,7 @@ make api          # uvicorn on :8000, docs at /docs
 | `POST /claims/motor/counterfactual` | What single change would alter this outcome |
 | `POST /claims/motor/explain/{gate}` | How much rests on one gate |
 | `POST /intake/extract` | Read a claimant's own words into structured facts |
+| `POST /agents/vision/assess` | Read a claim photo and report visible damage |
 | `GET /health` | Liveness |
 
 `?as_at=YYYY-MM-DD` fixes the Code clock at a point in time. The eval harness
