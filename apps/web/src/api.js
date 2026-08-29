@@ -78,4 +78,11 @@ export async function serviceUp() {
   }
 }
 
+/**
+ * Read one claim photo and return what is visible in it.
+ * Evidence only — never a coverage decision.
+ */
+export const assessDamage = (imageBase64) =>
+  post('/agents/vision/assess', { image_base64: imageBase64 });
+
 export { ApiError };

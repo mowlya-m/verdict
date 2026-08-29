@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import Landing from './Landing.jsx';
 import { ALL_CLAIMS, AS_AT } from './claims.js';
-import { decideMotor, decideHealth, counterfactual, serviceUp } from './api.js';
+import { decideMotor, decideHealth, counterfactual, extractIntake, assessDamage, serviceUp } from './api.js';
 
 /* ============================================================================
    VERDICT — full product surface
@@ -198,6 +198,12 @@ function Lodge({ onSubmit }) {
     'I was stopped at the lights on Swan Street and the car behind went into my rear bumper. Nobody was hurt. We swapped details.'
   );
   const [when, setWhen] = useState('2026-08-04');
+  const [photoStatus, setPhotoStatus] = useState('idle'); // idle | reading | done | error
+  const [photoAssessment, setPhotoAssessment] = useState(null);
+  const [photoError, setPhotoError] = useState(null);
+  const [extractStatus, setExtractStatus] = useState('idle'); // idle | loading | done | error
+  const [extraction, setExtraction] = useState(null);
+  const [extractError, setExtractError] = useState(null);
   const steps = ['What happened', 'When and where', 'Evidence'];
 
   return (
@@ -216,16 +222,53 @@ function Lodge({ onSubmit }) {
           <>
             <h2>Tell us what happened</h2>
             <p className="sub">Write it the way you’d tell a friend. We pull out the details we need.</p>
-            <textarea value={what} onChange={(e) => setWhat(e.target.value)} rows={6} aria-label="What happened" />
-            <div className="extract">
-              <span className="tiny">Read from your description</span>
-              <ul>
-                <li><b>Collision</b> · rear impact</li>
-                <li><b>Swan Street</b> · Melbourne</li>
-                <li><b>No injuries</b> reported</li>
-                <li><b>Other driver</b> details exchanged</li>
-              </ul>
-            </div>
+            <textarea
+              value={what}
+              onChange={(e) => setWhat(e.target.value)}
+              onBlur={async (e) => {
+                const text = e.target.value.trim();
+                if (text.length < 20) return;
+                setExtractStatus('loading');
+                try {
+                  const result = await extractIntake(text);
+                  setExtraction(result);
+                  setExtractStatus('done');
+                } catch (err) {
+                  setExtractStatus('error');
+                  setExtractError(err.message || 'Could not read the description.');
+                }
+              }}
+              rows={6}
+              aria-label="What happened"
+            />
+            {extractStatus === 'loading' && (
+              <div className="extract extract-loading">
+                <span className="tiny">Reading your description…</span>
+              </div>
+            )}
+            {extractStatus === 'error' && (
+              <div className="extract extract-err" role="alert">
+                <span className="tiny">Could not extract automatically</span>
+                <p>{extractError}</p>
+              </div>
+            )}
+            {extractStatus === 'done' && extraction && (
+              <div className="extract" aria-live="polite">
+                <span className="tiny">Read from your description</span>
+                <ul>
+                  {extraction.peril && extraction.peril !== 'other' && (
+                    <li><b>{extraction.peril.replace(/_/g, ' ')}</b></li>
+                  )}
+                  {extraction.location && <li><b>{extraction.location}</b></li>}
+                  {extraction.injuries_reported === false && <li>No injuries reported</li>}
+                  {extraction.injuries_reported === true && <li>Injuries reported</li>}
+                  {extraction.third_party_details_exchanged && <li>Other driver details exchanged</li>}
+                  {extraction.missing?.length > 0 && (
+                    <li>Still needed: {extraction.missing.join(', ')}</li>
+                  )}
+                </ul>
+              </div>
+            )}
           </>
         )}
         {step === 1 && (
@@ -255,7 +298,6 @@ function Lodge({ onSubmit }) {
             <p className="sub">Photos from your phone are fine. Add a repair quote if you have one.</p>
             <div className="drops">
               {[
-                ['Damage photos', '5 added', true],
                 ['Driver licence', 'Added', true],
                 ['Repair quote', 'Added', true],
                 ['Police report', 'Not needed for this claim', false],
@@ -266,6 +308,52 @@ function Lodge({ onSubmit }) {
                 </div>
               ))}
             </div>
+            <label className="field" style={{ marginTop: 16 }}>
+              <span>Damage photos</span>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  setPhotoStatus('reading');
+                  const reader = new FileReader();
+                  reader.onload = async () => {
+                    const b64 = reader.result.split(',')[1];
+                    try {
+                      const result = await assessDamage(b64);
+                      setPhotoAssessment(result);
+                      setPhotoStatus('done');
+                    } catch (err) {
+                      setPhotoStatus('error');
+                      setPhotoError(err.message || 'Could not read the photo.');
+                    }
+                  };
+                  reader.readAsDataURL(file);
+                }}
+              />
+            </label>
+            {photoStatus === 'reading' && (
+              <div className="extract extract-loading">
+                <span className="tiny">Reading the photo…</span>
+              </div>
+            )}
+            {photoStatus === 'error' && (
+              <div className="extract extract-err" role="alert">
+                <span className="tiny">Could not read the photo</span>
+                <p>{photoError}</p>
+              </div>
+            )}
+            {photoStatus === 'done' && photoAssessment && (
+              <div className="extract" aria-live="polite">
+                <span className="tiny">Read from the photo</span>
+                <ul>
+                  <li><b>{photoAssessment.part}</b></li>
+                  <li>Severity: {photoAssessment.severity}</li>
+                  {photoAssessment.quote && <li>{photoAssessment.quote}</li>}
+                </ul>
+              </div>
+            )}
           </>
         )}
         <div className="navrow">
